@@ -3,10 +3,17 @@
 
 #include <stdio.h>
 #include <d3d11.h>
+#include <d3dcompiler.h>
 
 #include "SDL2/SDL_syswm.h"
 #include "SDL2/SDL.h"
 #undef main
+
+struct Vertex
+{
+	float x;
+	float y;
+};
 
 int main()
 {
@@ -29,6 +36,10 @@ int main()
 	ID3D11Device* dev;
 	ID3D11DeviceContext* devCon;
 	ID3D11RenderTargetView* backbuffer;
+	ID3D11VertexShader* vShader;
+	ID3D11PixelShader* pShader;
+	ID3D11Buffer* vBuffer;
+	ID3D11InputLayout* inputLayout;
 
 	// create a struct to hold information about the swap chain
 	DXGI_SWAP_CHAIN_DESC scd;
@@ -79,6 +90,62 @@ int main()
 
 	devCon->RSSetViewports(1, &viewport);
 
+	//Compile, create, and set shaders
+	ID3D10Blob* vs;
+	ID3D10Blob* ps;
+
+	ID3D10Blob* vsError;
+	ID3D10Blob* psError;
+
+	auto resv = D3DCompileFromFile(L"VertexShader.vs", nullptr, nullptr, "vertexMain", "vs_4_0", 0, 0, &vs, &vsError);
+	auto resp = D3DCompileFromFile(L"PixelShader.ps", nullptr, nullptr, "pixelMain", "ps_4_0", 0, 0, &ps, &psError);
+
+	if (vsError != nullptr) printf("\nVERTEX SHADER ERRORS:\n%s\n", (const char*)vsError->GetBufferPointer());
+	if (psError != nullptr) printf("\nPIXEL SHADER ERRORS:\n%s\n", (const char*)psError->GetBufferPointer());
+
+	if (resv == D3D10_ERROR_FILE_NOT_FOUND) printf("file not found vs\n");
+	if (resp == D3D10_ERROR_FILE_NOT_FOUND) printf("file not found ps\n");
+
+	dev->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, &vShader);
+	dev->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, &pShader);
+
+	devCon->VSSetShader(vShader, nullptr, 0);
+	devCon->PSSetShader(pShader, nullptr, 0);
+
+	D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	dev->CreateInputLayout(inputElementDesc, 1, vs->GetBufferPointer(), vs->GetBufferSize(), &inputLayout);
+	devCon->IASetInputLayout(inputLayout);
+
+	//Setup and load vertex buffer
+	Vertex vertices[] =
+	{
+		{ -1.0f, 1.0f },
+		{ 1.0f, 1.0f },
+		{ -1.0f, -1.0f },
+		{ -1.0f, -1.0f },
+		{ 1.0f, 1.0f },
+		{ 1.0f, -1.0f }
+	};
+
+	D3D11_BUFFER_DESC vBuffDesc;
+	ZeroMemory(&vBuffDesc, sizeof(vBuffDesc));
+
+	vBuffDesc.Usage = D3D11_USAGE_DYNAMIC;
+	vBuffDesc.ByteWidth = sizeof(vertices);
+	vBuffDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vBuffDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	dev->CreateBuffer(&vBuffDesc, nullptr, &vBuffer);
+
+	D3D11_MAPPED_SUBRESOURCE mappedBuffer;
+	devCon->Map(vBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedBuffer);
+	memcpy(mappedBuffer.pData, vertices, sizeof(vertices));
+	devCon->Unmap(vBuffer, 0);
+
 	while (true)
 	{
         SDL_Event event;
@@ -100,13 +167,25 @@ int main()
             }
         }
 
-		const FLOAT color[4] = { 0.5f, 0.0f, 0.0f, 1.0f };
+		const FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		devCon->ClearRenderTargetView(backbuffer, color);
+		
+		UINT stride = sizeof(Vertex);
+		UINT offset = 0;
+		
+		devCon->IASetVertexBuffers(0, 1, &vBuffer, &stride, &offset);
+		devCon->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		devCon->Draw(6, 0);
+
 		swapChain->Present(0, 0);
 	}
 
 	SDL_DestroyWindow(window);
 
+	vBuffer->Release();
+	inputLayout->Release();
+	pShader->Release();
+	vShader->Release();
 	swapChain->Release();
 	backbuffer->Release();
 	dev->Release();
