@@ -159,11 +159,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ImGuiBackend\imgui_impl_dx11.cpp" />
+    <ClCompile Include="ImGuiBackend\imgui_impl_sdl.cpp" />
     <ClCompile Include="SVO.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="PixelShader.ps" />
     <None Include="VertexShader.vs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ImGuiBackend\imgui_impl_dx11.h" />
+    <ClInclude Include="ImGuiBackend\imgui_impl_sdl.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

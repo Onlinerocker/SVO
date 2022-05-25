@@ -5,6 +5,10 @@
 #include <d3d11.h>
 #include <d3dcompiler.h>
 
+#include "imgui.h"
+#include "ImGuiBackend/imgui_impl_sdl.h"
+#include "ImGuiBackend/imgui_impl_dx11.h"
+
 #include "SDL2/SDL_syswm.h"
 #include "SDL2/SDL.h"
 #undef main
@@ -22,6 +26,7 @@ int main()
 	const int32_t width = 1280;
 	const int32_t height = 720;
 
+	//SDL Setup
 	SDL_Init(SDL_INIT_VIDEO);
 
 	SDL_Window* window = SDL_CreateWindow("SVO Renderer", 10, 100, width, height, 0);
@@ -30,7 +35,7 @@ int main()
 
 	SDL_SysWMinfo sysWMInfo;
 	SDL_VERSION(&sysWMInfo.version);
-	SDL_GetWindowWMInfo(window, &sysWMInfo);
+	SDL_GetWindowWMInfo(window, &sysWMInfo);	
 
 	IDXGISwapChain* swapChain;
 	ID3D11Device* dev;
@@ -146,12 +151,20 @@ int main()
 	memcpy(mappedBuffer.pData, vertices, sizeof(vertices));
 	devCon->Unmap(vBuffer, 0);
 
+	//DearImGui setup
+	ImGui::CreateContext();
+	ImGui::StyleColorsDark();
+
+	ImGui_ImplSDL2_InitForD3D(window);
+	ImGui_ImplDX11_Init(dev, devCon);
+
 	while (true)
 	{
         SDL_Event event;
 
         while (SDL_PollEvent(&event))
         {
+			ImGui_ImplSDL2_ProcessEvent(&event);
             switch (event.type)
             {
 				case SDL_QUIT:
@@ -177,8 +190,25 @@ int main()
 		devCon->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		devCon->Draw(6, 0);
 
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplSDL2_NewFrame();
+		ImGui::NewFrame();
+
+		ImGui::Begin("Test window!");
+		if (ImGui::Button("Epic button!!!"))
+		{
+			printf("hello from button!!\n");
+		}
+		ImGui::End();
+		
+		ImGui::Render();
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		swapChain->Present(0, 0);
 	}
+
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
+	ImGui::DestroyContext();
 
 	SDL_DestroyWindow(window);
 

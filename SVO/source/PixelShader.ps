@@ -14,11 +14,11 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
 	float3 curPos = cameraPos;
 
-	float4 diffuse = float4(194.0/255.0, 224.0/255.0, 249.0/255.0, 1);
+	float4 diffuse = float4(194.0/255.0, 249.0/255.0, 224.0/255.0, 1);
 	float3 spherePos = float3(0, 0, 2);
 	float sphereRad = 1;
 
-	for(int i = 0; i < 1000; ++i)
+	for(int i = 0; i < 20; ++i)
 	{
 		float d = length(spherePos - curPos) - sphereRad;
 
