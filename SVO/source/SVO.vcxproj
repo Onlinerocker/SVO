@@ -164,8 +164,8 @@
     <ClCompile Include="SVO.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="PixelShader.ps" />
-    <None Include="VertexShader.vs" />
+    <None Include="PixelShader.hlsl" />
+    <None Include="VertexShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ImGuiBackend\imgui_impl_dx11.h" />

@@ -26,8 +26,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="VertexShader.vs" />
-    <None Include="PixelShader.ps" />
+    <None Include="VertexShader.hlsl" />
+    <None Include="PixelShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ImGuiBackend\imgui_impl_dx11.h">

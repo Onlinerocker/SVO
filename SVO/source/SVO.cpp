@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
+#include <chrono>
+
+#include "glm/glm.hpp"
 
 #include "imgui.h"
 #include "ImGuiBackend/imgui_impl_sdl.h"
@@ -15,16 +18,28 @@
 
 struct Vertex
 {
-	float x;
-	float y;
+	glm::vec2 pos;
+};
+
+struct CameraInfo
+{
+	glm::vec3 pos;
 };
 
 int main()
 {
 	printf("Starting Up...\n");
 
+	//Application info
 	const int32_t width = 1280;
 	const int32_t height = 720;
+
+	CameraInfo camInfo{ {0, 0, 0} };
+
+	std::chrono::high_resolution_clock::time_point startTime = std::chrono::high_resolution_clock::now();
+	std::chrono::microseconds deltaTime;
+	float fps = 0.0f;
+	float frameTime = 0.0f;
 
 	//SDL Setup
 	SDL_Init(SDL_INIT_VIDEO);
@@ -45,6 +60,7 @@ int main()
 	ID3D11PixelShader* pShader;
 	ID3D11Buffer* vBuffer;
 	ID3D11InputLayout* inputLayout;
+	ID3D11Buffer* cameraConstBuffer;
 
 	// create a struct to hold information about the swap chain
 	DXGI_SWAP_CHAIN_DESC scd;
@@ -102,8 +118,8 @@ int main()
 	ID3D10Blob* vsError;
 	ID3D10Blob* psError;
 
-	auto resv = D3DCompileFromFile(L"VertexShader.vs", nullptr, nullptr, "vertexMain", "vs_4_0", 0, 0, &vs, &vsError);
-	auto resp = D3DCompileFromFile(L"PixelShader.ps", nullptr, nullptr, "pixelMain", "ps_4_0", 0, 0, &ps, &psError);
+	auto resv = D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "vertexMain", "vs_4_0", 0, 0, &vs, &vsError);
+	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", 0, 0, &ps, &psError);
 
 	if (vsError != nullptr) printf("\nVERTEX SHADER ERRORS:\n%s\n", (const char*)vsError->GetBufferPointer());
 	if (psError != nullptr) printf("\nPIXEL SHADER ERRORS:\n%s\n", (const char*)psError->GetBufferPointer());
@@ -128,12 +144,12 @@ int main()
 	//Setup and load vertex buffer
 	Vertex vertices[] =
 	{
-		{ -1.0f, 1.0f },
-		{ 1.0f, 1.0f },
-		{ -1.0f, -1.0f },
-		{ -1.0f, -1.0f },
-		{ 1.0f, 1.0f },
-		{ 1.0f, -1.0f }
+		{ {-1.0f, 1.0f} },
+		{ {1.0f, 1.0f} },
+		{ {-1.0f, -1.0f} },
+		{ {-1.0f, -1.0f} },
+		{ {1.0f, 1.0f} },
+		{ {1.0f, -1.0f} }
 	};
 
 	D3D11_BUFFER_DESC vBuffDesc;
@@ -151,6 +167,18 @@ int main()
 	memcpy(mappedBuffer.pData, vertices, sizeof(vertices));
 	devCon->Unmap(vBuffer, 0);
 
+	//Setup and load camera constant buffer
+	D3D11_BUFFER_DESC cameraConstBuffDesc;
+	ZeroMemory(&cameraConstBuffDesc, sizeof(cameraConstBuffDesc));
+
+	cameraConstBuffDesc.Usage = D3D11_USAGE_DEFAULT;
+	cameraConstBuffDesc.ByteWidth = 16; //must be a multiple of 16
+	cameraConstBuffDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	dev->CreateBuffer(&cameraConstBuffDesc, nullptr, &cameraConstBuffer);
+	devCon->PSSetConstantBuffers(0, 1, &cameraConstBuffer);
+	devCon->UpdateSubresource(cameraConstBuffer, 0, 0, &camInfo, 0, 0);
+
 	//DearImGui setup
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
@@ -158,8 +186,21 @@ int main()
 	ImGui_ImplSDL2_InitForD3D(window);
 	ImGui_ImplDX11_Init(dev, devCon);
 
+	int frameCount = 0;
 	while (true)
 	{
+		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
+		
+		++frameCount;
+		if (frameCount == 1000)
+		{
+			fps = 1000000.0f / (float)deltaTime.count();
+			frameTime = (float)deltaTime.count() / 1000.0f;
+			frameCount = 0;
+		}
+
+		startTime = std::chrono::high_resolution_clock::now();
+
         SDL_Event event;
 
         while (SDL_PollEvent(&event))
@@ -194,10 +235,12 @@ int main()
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-		ImGui::Begin("Test window!");
-		if (ImGui::Button("Epic button!!!"))
+		ImGui::Begin("Debug");
+		ImGui::Text("FPS %.1f", fps);
+		ImGui::Text("%0.2f ms", frameTime);
+		if (ImGui::SliderFloat3("Camera Position", &camInfo.pos.x, -2.0f, 2.0f))
 		{
-			printf("hello from button!!\n");
+			devCon->UpdateSubresource(cameraConstBuffer, 0, nullptr, &camInfo, 0, 0);
 		}
 		ImGui::End();
 		
