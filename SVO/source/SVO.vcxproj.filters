@@ -15,13 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="SVO.cpp">
+    <ClCompile Include="Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ImGuiBackend\imgui_impl_dx11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ImGuiBackend\imgui_impl_sdl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SVO.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -34,6 +37,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ImGuiBackend\imgui_impl_sdl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SVO.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
