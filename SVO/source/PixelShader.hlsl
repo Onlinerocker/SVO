@@ -81,7 +81,9 @@ float4 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDire
         tMin = tzMin;
         norm = zNorm;
     }
+    tMax = min(tMax, tzMax);
 
+    norm.z = tMax; //DEBUG
     return float4(norm, tMin);
 }
 
@@ -89,6 +91,21 @@ uint getValidMask(uint mask, uint index)
 {
     uint x = 1 << (24 + index);
     return mask & x;
+}
+
+uint getChildIndex(float3 boxPos, float3 pos)
+{
+    if (pos.x > boxPos.x && pos.y < boxPos.y && pos.z > boxPos.z) return 0;
+    if (pos.x < boxPos.x && pos.y < boxPos.y && pos.z > boxPos.z) return 1;
+    if (pos.x < boxPos.x && pos.y < boxPos.y && pos.z < boxPos.z) return 2;
+    if (pos.x > boxPos.x && pos.y < boxPos.y && pos.z < boxPos.z) return 3;
+
+    if (pos.x > boxPos.x && pos.y > boxPos.y && pos.z > boxPos.z) return 4;
+    if (pos.x < boxPos.x && pos.y > boxPos.y && pos.z > boxPos.z) return 5;
+    if (pos.x < boxPos.x && pos.y > boxPos.y && pos.z < boxPos.z) return 6;
+    if (pos.x > boxPos.x && pos.y > boxPos.y && pos.z < boxPos.z) return 7;
+
+    return 9;
 }
 
 float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
@@ -113,45 +130,57 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 	//Hotwire internet
 	//Renters insurance
 	
-    if (getValidMask(Elements[0].masks, 0) > 0)
+    float4 ret = raytraceBox(float3(0,0,0), 0.5, cameraPos, dir);
+
+    if (ret.a < 0.0) return float4(0, 0, 0.3, 1);
+
+    float3 pos = cameraPos + (ret.a * dir);
+    float3 posMax = cameraPos + (ret.z * dir);
+
+    uint childHitIndex = getChildIndex(float3(0, 0, 0), pos);
+    uint childHitMaxIndex = getChildIndex(float3(0, 0, 0), posMax);
+
+    if (getValidMask(Elements[0].masks, childHitIndex) > 0)
     {
+        return float4(1, 0, 0, 1);
         float4 retMin = raytraceBox(float3(0.25, 0, 0.25), 0.25, cameraPos, dir);
-        
-        if (retMin.a > 0.0) 
+
+        if (retMin.a > 0.0)
             col = retMin.rgb;
-		
+
         tMin = retMin.a;
     }
-	
-    if (getValidMask(Elements[0].masks, 1) > 0)
-    {
-        float4 retMin = raytraceBox(float3(-0.25, 0, 0.25), 0.25, cameraPos, dir);
-        if (retMin.a > 0.0 && (tMin < 0 || retMin.a < tMin))
-        {
-            col = retMin.rgb;
-            tMin = retMin.a;
-        }
-    }
-     
-    if (getValidMask(Elements[0].masks, 2) > 0)
-    {
-        float4 retMin = raytraceBox(float3(-0.25, 0, -0.25), 0.25, cameraPos, dir);
-        if (retMin.a > 0.0 && (tMin < 0 || retMin.a < tMin))
-        {
-            col = retMin.rgb;
-            tMin = retMin.a;
-        }
-    }
-	
-    if (getValidMask(Elements[0].masks, 3) > 0)
-    {
-        float4 retMin = raytraceBox(float3(0.25, 0, -0.25), 0.25, cameraPos, dir);
-        if (retMin.a > 0.0 && (tMin < 0 || retMin.a < tMin))
-        {
-            col = retMin.rgb;
-            tMin = retMin.a;
-        }
-    }
+    else if (childHitIndex >= 8) return float4(0, 0, 0.3, 1);
+
+    //if (getValidMask(Elements[0].masks, 1) > 0)
+    //{
+    //    float4 retMin = raytraceBox(float3(-0.25, 0, 0.25), 0.25, cameraPos, dir);
+    //    if (retMin.a > 0.0 && (tMin < 0 || retMin.a < tMin))
+    //    {
+    //        col = retMin.rgb;
+    //        tMin = retMin.a;
+    //    }
+    //}
+    // 
+    //if (getValidMask(Elements[0].masks, 2) > 0)
+    //{
+    //    float4 retMin = raytraceBox(float3(-0.25, 0, -0.25), 0.25, cameraPos, dir);
+    //    if (retMin.a > 0.0 && (tMin < 0 || retMin.a < tMin))
+    //    {
+    //        col = retMin.rgb;
+    //        tMin = retMin.a;
+    //    }
+    //}
+	//
+    //if (getValidMask(Elements[0].masks, 3) > 0)
+    //{
+    //    float4 retMin = raytraceBox(float3(0.25, 0, -0.25), 0.25, cameraPos, dir);
+    //    if (retMin.a > 0.0 && (tMin < 0 || retMin.a < tMin))
+    //    {
+    //        col = retMin.rgb;
+    //        tMin = retMin.a;
+    //    }
+    //}
 	
 	
     return float4(col, 1);

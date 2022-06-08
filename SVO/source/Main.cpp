@@ -43,7 +43,7 @@ int main()
 	float fps = 0.0f;
 	float frameTime = 0.0f;
 
-	SVO::Element root{ 69, (0b00000111 << 24) | (0b00001111 << 16) };
+	SVO::Element root{ 69, static_cast<uint32_t>(0b11111111 << 24) | (0b00001111 << 16) };
 	SVO svo(1);
 	svo.vec().push_back(root);
 
@@ -266,7 +266,7 @@ int main()
 		ImGui::Begin("Debug");
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
-		if (ImGui::SliderFloat3("Camera Position", &camInfo.pos.x, -2.0f, 2.0f))
+		if (ImGui::SliderFloat3("Camera Position", &camInfo.pos.x, -3.0f, 2.0f))
 		{
 			devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &camInfo, 0, 0);
 		}
