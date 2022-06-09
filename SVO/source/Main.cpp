@@ -44,7 +44,7 @@ int main()
 	float fps = 0.0f;
 	float frameTime = 0.0f;
 
-	SVO::Element root{ 69, static_cast<uint32_t>(0b00011011 << 24) | (0b00001111 << 16) };
+	SVO::Element root{ 69, static_cast<uint32_t>(0b10100011 << 24) | (0b00001111 << 16) };
 	SVO svo(1);
 	svo.vec().push_back(root);
 

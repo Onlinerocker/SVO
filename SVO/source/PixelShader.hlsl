@@ -23,15 +23,10 @@ float calculateT(float plane, float origin, float direction)
 }
 
 //https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
-float4 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDirection)
+float2 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDirection)
 {
     float4 bg = float4(0.3, 0.3, 0.3, 1);
     float4 diffuse = float4(194.0 / 255.0, 249.0 / 255.0, 224.0 / 255.0, 1);
-	
-    float3 xNorm = float3(1, 0, 0);
-    float3 yNorm = float3(0, 1, 0);
-    float3 zNorm = float3(0, 0, 1);
-    float3 norm = xNorm;
 	
     float3 boxMin = boxPos - float3(boxRad, boxRad, boxRad);
     float3 boxMax = boxPos + float3(boxRad, boxRad, boxRad);
@@ -57,12 +52,11 @@ float4 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDire
     }
 	
     if ((tMin > tyMax) || (tMax < tyMin))
-        return float4(bg.rgb, -1);
+        return float2(-1, -1);
 	
     if (tyMin > tMin)
     {
         tMin = tyMin;
-        norm = yNorm;
     }
     tMax = min(tMax, tyMax);
 	
@@ -77,17 +71,15 @@ float4 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDire
     }
 	
     if ((tMin > tzMax) || (tMax < tzMin))
-        return float4(bg.rgb, -1);
+        return float2(-1, -1);
 		
     if (tzMin > tMin)
     {
         tMin = tzMin;
-        norm = zNorm;
     }
     tMax = min(tMax, tzMax);
 
-    norm.z = tMax; //DEBUG
-    return float4(norm, tMin);
+    return float2(tMin, tMax);
 }
 
 uint getValidMask(uint mask, uint index)
@@ -166,20 +158,17 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 dirLight = float3(0, 1, -1);
     float3 movingLight = float3(3*sin(Time), 1, -1);
 
-    float4 lightRet = raytraceBox(movingLight, 0.1, cameraPos, dir);
-    if (lightRet.a >= 0.0) return float4(1, 1, 1, 1);
+    float2 lightRet = raytraceBox(movingLight, 0.1, cameraPos, dir);
+    if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
 
     float3 rootPos = float3(0, 0, 0);
     float rootScale = 0.5;
-    float4 ret = raytraceBox(rootPos, rootScale, cameraPos, dir);
+    float2 ret = raytraceBox(rootPos, rootScale, cameraPos, dir);
 
-    if (ret.a < 0.0) return float4(0, 0, 0.3, 1);
+    if (ret.x < 0.0) return float4(0, 0, 0.3, 1);
 
-    float3 pos = cameraPos + (ret.a * dir);
-    float3 posMax = cameraPos + (ret.z * dir);
-
+    float3 pos = cameraPos + (ret.x * dir);
     uint childHitIndex = getChildIndex(float3(0, 0, 0), pos);
-    uint childHitMaxIndex = getChildIndex(float3(0, 0, 0), posMax);
 
     if (getValidMask(Elements[0].masks, childHitIndex) > 0)
     {
@@ -199,13 +188,13 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         bool didNotHit = true;
         while (didNotHit)
         {
-            float4 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
-            childPosMax = cameraPos + (retChild.z * dir * 1.000025);
+            float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
+            childPosMax = cameraPos + (retChild.y * dir * 1.000025);
 
             childHitIndex = getChildIndex(rootPos, childPosMax);
             child = getChildBox(rootPos, rootScale, childHitIndex);
             if (getValidMask(Elements[0].masks, childHitIndex) > 0) didNotHit = false;
-            else if (retChild.z >= ret.z) break;
+            else if (retChild.y >= ret.y) break;
 
         }
         if (!didNotHit)
