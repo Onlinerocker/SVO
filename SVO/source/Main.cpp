@@ -23,9 +23,10 @@ struct Vertex
 	glm::vec2 pos;
 };
 
-struct CameraInfo
+struct AppInfo
 {
 	glm::vec3 pos;
+	float time;
 };
 
 int main()
@@ -36,14 +37,14 @@ int main()
 	const int32_t width = 1280;
 	const int32_t height = 720;
 
-	CameraInfo camInfo{ {0, 0, 0} };
+	AppInfo appInfo{ {0, 0, 0}, 0.0f };
 
 	std::chrono::high_resolution_clock::time_point startTime = std::chrono::high_resolution_clock::now();
 	std::chrono::microseconds deltaTime;
 	float fps = 0.0f;
 	float frameTime = 0.0f;
 
-	SVO::Element root{ 69, static_cast<uint32_t>(0b11111111 << 24) | (0b00001111 << 16) };
+	SVO::Element root{ 69, static_cast<uint32_t>(0b00011011 << 24) | (0b00001111 << 16) };
 	SVO svo(1);
 	svo.vec().push_back(root);
 
@@ -192,8 +193,8 @@ int main()
 		++constBufferCount;
 	};
 
-	//Setup and load camera constant buffer
-	createConstantBuffer(&constBuffers[0], &camInfo, 16);
+	//Setup and load app info constant buffer
+	createConstantBuffer(&constBuffers[0], &appInfo, 16);
 
 	//Setup and load svo constant buffer
 	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16);
@@ -201,7 +202,7 @@ int main()
 
 	devCon->PSSetConstantBuffers(0, constBufferCount, constBuffers);
 
-	devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &camInfo, 0, 0);
+	devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 	devCon->UpdateSubresource(constBuffers[1], 0, nullptr, svo.vec().data(), 0, 0);
 
 	//ID3D11Buffer* buffers;
@@ -218,12 +219,13 @@ int main()
 	while (true)
 	{
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
-		
+		appInfo.time += (static_cast<float>(deltaTime.count()) / 1000000.0f);
+
 		++frameCount;
 		if (frameCount == 1000)
 		{
-			fps = 1000000.0f / (float)deltaTime.count();
-			frameTime = (float)deltaTime.count() / 1000.0f;
+			fps = 1000000.0f / static_cast<float>(deltaTime.count());
+			frameTime = static_cast<float>(deltaTime.count()) / 1000.0f;
 			frameCount = 0;
 		}
 
@@ -266,10 +268,11 @@ int main()
 		ImGui::Begin("Debug");
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
-		if (ImGui::SliderFloat3("Camera Position", &camInfo.pos.x, -3.0f, 2.0f))
+		if (ImGui::SliderFloat3("Camera Position", &appInfo.pos.x, -3.0f, 2.0f))
 		{
-			devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &camInfo, 0, 0);
+			//devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		}
+		devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		ImGui::End();
 		
 		ImGui::Render();
