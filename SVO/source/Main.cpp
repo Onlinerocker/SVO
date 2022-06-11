@@ -37,16 +37,41 @@ int main()
 	const int32_t width = 1280;
 	const int32_t height = 720;
 
-	AppInfo appInfo{ {0, 0, 0}, 0.0f };
+	AppInfo appInfo{ {0, 0, -300.0f}, 0.0f };
 
 	std::chrono::high_resolution_clock::time_point startTime = std::chrono::high_resolution_clock::now();
 	std::chrono::microseconds deltaTime;
 	float fps = 0.0f;
 	float frameTime = 0.0f;
 
-	SVO::Element root{ 69, static_cast<uint32_t>(0b10100011 << 24) | (0b00001111 << 16) };
-	SVO svo(1);
+	//SVO::Element root{ 1, static_cast<uint32_t>(0b00101011 << 24) | (0b00000011 << 16) };
+	//
+	//SVO::Element child{ 1,  static_cast<uint32_t>(0b10111111 << 24) | (0b11111111 << 16) };
+	//SVO::Element child1{ 1, static_cast<uint32_t>(0b01111111 << 24) | (0b10111111 << 16) };
+
+	int max = 10;
+	SVO svo(max + 1);
+
+	SVO::Element root{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00000111 << 16) };
 	svo.vec().push_back(root);
+	//svo.vec().push_back(child);
+	//svo.vec().push_back(child1);
+
+	
+	for (int i = 0; i <= max; ++i)
+	{
+		svo.vec().back().childPtr = (uint32_t)svo.vec().size();
+		if (i == max)
+		{
+			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00100111 << 16) };
+			svo.vec().push_back(newChild);
+		}
+		else
+		{
+			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00000111 << 16) };
+			svo.vec().push_back(newChild);
+		}
+	}
 
 	//SDL Setup
 	SDL_Init(SDL_INIT_VIDEO);
@@ -197,7 +222,7 @@ int main()
 	createConstantBuffer(&constBuffers[0], &appInfo, 16);
 
 	//Setup and load svo constant buffer
-	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16);
+	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * (UINT)svo.vec().size());
 		//svo.data().size() < 64 ? (UINT)svo.data().size() * (UINT)sizeof(SVO::Element) : 64 * (UINT)sizeof(SVO::Element)); //max of 64 elements, for now
 
 	devCon->PSSetConstantBuffers(0, constBufferCount, constBuffers);
@@ -268,7 +293,7 @@ int main()
 		ImGui::Begin("Debug");
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
-		if (ImGui::SliderFloat3("Camera Position", &appInfo.pos.x, -3.0f, 2.0f))
+		if (ImGui::SliderFloat3("Camera Position", &appInfo.pos.x, -300.0f, 300.0f))
 		{
 			//devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		}

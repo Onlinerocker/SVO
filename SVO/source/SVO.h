@@ -34,6 +34,7 @@ public:
 	{
 		uint32_t childPtr;  //relative pointer to children in SVO
 		uint32_t masks;
+		uint64_t padding;
 	};
 
 public:
