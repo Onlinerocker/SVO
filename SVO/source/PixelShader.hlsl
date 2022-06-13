@@ -211,13 +211,20 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         //if (retChild.x > 0.0) return float4(1, 0, 0, 1);
         //else if (retChild.x <= 0.0 && retChild.y > 0.0) return float4(0, 1, 0, 1);
 
+        //if (retChild.x < 0.0 && retChild.y < 0.0)
+        //{
+        //    float temp = retChild.x;
+        //    retChild.x = retChild.y;
+        //    retChild.y = temp;
+        //}
+        
         float rootExit = retChild.y;
         float exitMax = retChild.y;
         uint rootIndex = 0;
 
-        //if(retChild.x < 0.0) return float4(0.3, 0, 0.3, 1);
+        if(retChild.x < 0.0 && retChild.y < 0.0) return float4(0.3, 0, 0, 1);
 
-        float3 childPos = cameraPos + (retChild.x * dir);
+        float3 childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.95 : 1.0));
 
         uint childHitIndex = getChildIndex(rootPos, childPos);
         float3 indexPos = childPos;
@@ -230,8 +237,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         while (didNotHit)
         {
             float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
-            childPos = cameraPos + (retChild.x * dir);
-            float3 childPosMax = cameraPos + (retChild.y * dir * 1.000025);
+            
+            childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.95 : 1.0));
+            float3 childPosMax = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.95 : 1.000025));
+            //1.000025
 
             if (stackIndex > 0 && steps > 1000) return float4(0, 0, 0, 1);
             //if (stackIndex > 2) return float4(1, 0, 0, 1);
@@ -239,16 +248,19 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             //if (retChild.y < 0.0) return float4(1, 1, 0, 1);
             //if (retChild.y < 0.0) return float4(abs(retChild.y) / 100.0f, abs(retChild.x)/100.0f, 0, 1);
 
-            if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x > 0.0)
+            if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0)
             {
-                if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0)
+                if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x > 0.0 && retChild.y > 0.0)
                 {
                     //if (stackIndex > 0) return float4(1, 0, 0, 1);
+                    //return float4(0, 1, 0, 1);
                     didNotHit = false;
                     break;
                 }
-                else
+                else if (!getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0)
                 {
+                    //return float4(0, 1, 0, 1);
+                    
                     ParentElement parent;
                     parent.pos = rootPos;
                     parent.scale = rootScale;
@@ -273,7 +285,8 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     continue;
                 }
             }
-            else if (retChild.y >= rootExit)
+            
+            if (retChild.y >= rootExit)
             {
                 if (retChild.y >= exitMax) return float4(0.3, 0, 0.3, 1);
                 else
@@ -294,8 +307,12 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             else
             {
                 //return float4(0, 1, 0, 1);
-                if (retChild.y < 0.0) return float4(0, 1, 0, 1);
+                //if (retChild.y < 0.0) return float4(0, 1, 0, 1);
                 childHitIndex = getChildIndex(rootPos, childPosMax);
+                
+                if (childHitIndex > 7)
+                    return float4(0, 1, 0, 1);
+                
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
                 if (stackIndex > 0) ++steps;
