@@ -18,6 +18,10 @@ cbuffer CameraInfo : register(b0)
 {
     float3 CamPos;
     float Time;
+
+    float3 Forward;
+    float3 Right;
+    float3 Up;
 };
 
 cbuffer SVOInfo : register(b1)
@@ -178,7 +182,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     uint stackIndex = 0;
 
     float3 cameraPos = CamPos; //float3(-1, 0.7, 0);
-    float3 dir = float3(x, y, 1);
+    float3 dir = (x * Right) + (y * Up) + Forward;
     dir = normalize(dir);
 
     float3 col = float3(0.3, 0.3, 0.3);
@@ -191,7 +195,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
 
     float3 rootPos = float3(0, 0, 0);
-    float rootScale = 100.0f;
+    float rootScale = 256.0;
 
     //if (getValidMask(Elements[0].masks, childHitIndex) > 0 && getLeafMask(Elements[0].masks, childHitIndex) > 0)
     //{
@@ -222,11 +226,13 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         float exitMax = retChild.y;
         uint rootIndex = 0;
 
-        if(retChild.x < 0.0 && retChild.y < 0.0) return float4(0.3, 0, 0, 1);
+        if(retChild.x <= 0.0 && retChild.y <= 0.0) return float4(0.3, 0, 0, 1);
 
-        float3 childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.95 : 1.0));
+        float3 childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.999995 : 1.000025));
 
         uint childHitIndex = getChildIndex(rootPos, childPos);
+        if (childHitIndex > 7)
+            return float4(0, 1, 1, 1);
         float3 indexPos = childPos;
         child = getChildBox(rootPos, rootScale, childHitIndex);
 
@@ -237,12 +243,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         while (didNotHit)
         {
             float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
-            
-            childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.95 : 1.0));
-            float3 childPosMax = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.95 : 1.000025));
+
+            //if (retChild.y == 0) retChild.y = 0.000025;
+
+            childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.999995 : 1.0));
+            float3 childPosMax = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
             //1.000025
 
-            if (stackIndex > 0 && steps > 1000) return float4(0, 0, 0, 1);
+            if (steps > 1000) return float4(1, 0, 0, 1);
             //if (stackIndex > 2) return float4(1, 0, 0, 1);
 
             //if (retChild.y < 0.0) return float4(1, 1, 0, 1);
@@ -250,7 +258,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
             if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0)
             {
-                if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x > 0.0 && retChild.y > 0.0)
+                if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0)
                 {
                     //if (stackIndex > 0) return float4(1, 0, 0, 1);
                     //return float4(0, 1, 0, 1);
@@ -277,11 +285,15 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     //return float4(rootIndex, 0, 0, 1);
                     
                     childHitIndex = getChildIndex(rootPos, childPos);
+                    if (childHitIndex > 7)
+                        return float4(1, 1, 1, 1);
+
                     indexPos = childPos;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
 
                     //if (childHitIndex == 0) return float4(0, 0, 1, 1);
 
+                    //++steps;
                     continue;
                 }
             }
@@ -298,6 +310,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootIndex = stack[stackIndex].index;
 
                     childHitIndex = getChildIndex(rootPos, childPosMax);
+                    if (childHitIndex > 7)
+                        return float4(1, 1, 0, 1);
+
                     indexPos = childPosMax;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
 
@@ -315,9 +330,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                 
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
-                if (stackIndex > 0) ++steps;
+                //if (stackIndex > 0) ++steps;
             }
 
+            ++steps;
         }
         if (!didNotHit)
         {

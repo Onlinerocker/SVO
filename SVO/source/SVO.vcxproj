@@ -159,6 +159,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="ImGuiBackend\imgui_impl_dx11.cpp" />
     <ClCompile Include="ImGuiBackend\imgui_impl_sdl.cpp" />
     <ClCompile Include="Main.cpp" />
@@ -169,6 +170,7 @@
     <None Include="VertexShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Camera.h" />
     <ClInclude Include="ImGuiBackend\imgui_impl_dx11.h" />
     <ClInclude Include="ImGuiBackend\imgui_impl_sdl.h" />
     <ClInclude Include="SVO.h" />

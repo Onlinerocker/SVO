@@ -17,6 +17,7 @@
 #undef main
 
 #include "SVO.h"
+#include "Camera.h"
 
 struct Vertex
 {
@@ -27,6 +28,18 @@ struct AppInfo
 {
 	glm::vec3 pos;
 	float time;
+
+	glm::vec4 forward;
+	glm::vec4 right;
+	glm::vec4 up;
+};
+
+struct InputData
+{
+	bool w{ false };
+	bool a{ false };
+	bool s{ false };
+	bool d{ false };
 };
 
 int main()
@@ -36,13 +49,19 @@ int main()
 	//Application info
 	const int32_t width = 1280;
 	const int32_t height = 720;
+	float flightSpeed = 100.0f;
 
-	AppInfo appInfo{ {0, 0, -300.0f}, 0.0f };
+	Camera camera;
+	InputData input;
+	AppInfo appInfo{ {0, 0, -300.0f}, 0.0f, {0, 0, 1, 0}, {1, 0, 0, 0}, {0, 1, 0, 0} };
 
 	std::chrono::high_resolution_clock::time_point startTime = std::chrono::high_resolution_clock::now();
 	std::chrono::microseconds deltaTime;
+	float deltaTimeSec = 0.0f;
 	float fps = 0.0f;
 	float frameTime = 0.0f;
+	int mouseX = 0;
+	int mouseY = 0;
 
 	//SVO::Element root{ 1, static_cast<uint32_t>(0b00101011 << 24) | (0b00000011 << 16) };
 	//
@@ -219,7 +238,7 @@ int main()
 	};
 
 	//Setup and load app info constant buffer
-	createConstantBuffer(&constBuffers[0], &appInfo, 16);
+	createConstantBuffer(&constBuffers[0], &appInfo, 64);
 
 	//Setup and load svo constant buffer
 	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * (UINT)svo.vec().size());
@@ -244,7 +263,8 @@ int main()
 	while (true)
 	{
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
-		appInfo.time += (static_cast<float>(deltaTime.count()) / 1000000.0f);
+		deltaTimeSec = (static_cast<float>(deltaTime.count()) / 1000000.0f);
+		appInfo.time += deltaTimeSec;
 
 		++frameCount;
 		if (frameCount == 1000)
@@ -261,6 +281,18 @@ int main()
         while (SDL_PollEvent(&event))
         {
 			ImGui_ImplSDL2_ProcessEvent(&event);
+			uint32_t mouseBtn = SDL_GetMouseState(&mouseX, &mouseY);
+			int btn = SDL_BUTTON(mouseBtn);
+
+			if (btn >= 2)
+			{
+				SDL_SetRelativeMouseMode(SDL_TRUE);
+			}
+			else
+			{
+				SDL_SetRelativeMouseMode(SDL_FALSE);
+			}
+
             switch (event.type)
             {
 				case SDL_QUIT:
@@ -269,12 +301,85 @@ int main()
 				    break;
 				}
 
+				case SDL_KEYDOWN:
+				{
+					if (event.key.keysym.scancode == SDL_SCANCODE_W)
+					{
+						input.w = true;
+					}
+					else if (event.key.keysym.scancode == SDL_SCANCODE_S)
+					{
+						input.s = true;
+					}
+					else if (event.key.keysym.scancode == SDL_SCANCODE_A)
+					{
+						input.a = true;
+					}
+					else if (event.key.keysym.scancode == SDL_SCANCODE_D)
+					{
+						input.d = true;
+					}
+					break;
+				}
+
+				case SDL_KEYUP:
+				{
+					if (event.key.keysym.scancode == SDL_SCANCODE_W)
+					{
+						input.w = false;
+					}
+					else if (event.key.keysym.scancode == SDL_SCANCODE_S)
+					{
+						input.s = false;
+					}
+					else if (event.key.keysym.scancode == SDL_SCANCODE_A)
+					{
+						input.a = false;
+					}
+					else if (event.key.keysym.scancode == SDL_SCANCODE_D)
+					{
+						input.d = false;
+					}
+					break;
+				}
+
+				case SDL_MOUSEMOTION:
+				{
+					if (btn >= 2)
+					{
+						camera.update(-(event.motion.xrel) / 10.0f, -(event.motion.yrel) / 10.0f);
+
+						appInfo.forward = glm::vec4(camera.forward(), 0);
+						appInfo.right = glm::vec4(camera.right(), 0);
+						appInfo.up = glm::vec4(camera.up(), 0);
+					}
+					break;
+				}
+
 				default:
 				{
 				    break;
 				}
             }
         }
+
+		if (input.w)
+		{
+			appInfo.pos += glm::vec3(appInfo.forward) * deltaTimeSec * flightSpeed;
+		}
+		else if (input.s)
+		{
+			appInfo.pos -= glm::vec3(appInfo.forward) * deltaTimeSec * flightSpeed;
+		}
+
+		if (input.a)
+		{
+			appInfo.pos -= glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
+		}
+		else if (input.d)
+		{
+			appInfo.pos += glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
+		}
 
 		const FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		devCon->ClearRenderTargetView(backbuffer, color);
@@ -291,12 +396,13 @@ int main()
 		ImGui::NewFrame();
 
 		ImGui::Begin("Debug");
+		ImGui::Text("[Flight Controls] WASD, right click + mouse");
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
-		if (ImGui::SliderFloat3("Camera Position", &appInfo.pos.x, -300.0f, 300.0f))
-		{
-			//devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
-		}
+		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
+
+		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 1000.0f));
+
 		devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		ImGui::End();
 		
