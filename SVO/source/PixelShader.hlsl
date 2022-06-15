@@ -244,13 +244,13 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         {
             float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
 
-            //if (retChild.y == 0) retChild.y = 0.000025;
+            //if (retChild.y == 0) return float4(1, 1, 0, 1);
+            //if (retChild.x == 0) return float4(1, 1, 1, 1);
 
             childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.999995 : 1.0));
             float3 childPosMax = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
-            //1.000025
 
-            if (steps > 1000) return float4(1, 0, 0, 1);
+            if (steps > 1000) return float4(retChild.x*20.0, 0, 0, 1);
             //if (stackIndex > 2) return float4(1, 0, 0, 1);
 
             //if (retChild.y < 0.0) return float4(1, 1, 0, 1);
