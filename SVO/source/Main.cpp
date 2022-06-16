@@ -71,7 +71,7 @@ int main()
 	int max = 10;
 	SVO svo(max + 1);
 
-	SVO::Element root{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00000111 << 16) };
+	SVO::Element root{ 123, static_cast<uint32_t>(0b00110111 << 24) | (0b00000111 << 16) };
 	svo.vec().push_back(root);
 	//svo.vec().push_back(child);
 	//svo.vec().push_back(child1);
@@ -79,7 +79,20 @@ int main()
 	
 	for (int i = 0; i <= max; ++i)
 	{
-		svo.vec().back().childPtr = (uint32_t)svo.vec().size();
+		svo.vec().back().childPtr = (uint32_t)svo.vec().size()+1;
+		if(i > 0) svo.vec()[svo.vec().size()-2].childPtr = (uint32_t)svo.vec().size();
+
+		if (i == max)
+		{
+			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00100111 << 16) };
+			svo.vec().push_back(newChild);
+		}
+		else
+		{
+			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00000111 << 16) };
+			svo.vec().push_back(newChild);
+		}
+
 		if (i == max)
 		{
 			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00100111 << 16) };

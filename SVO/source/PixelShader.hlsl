@@ -12,6 +12,7 @@ struct ParentElement
     float scale;
     float exit;
     uint index;
+    uint childIndex;
 };
 
 cbuffer CameraInfo : register(b0)
@@ -120,15 +121,15 @@ uint getChildPointer(SVOElement parentElement, uint index)
 
 uint getChildIndex(float3 boxPos, float3 pos)
 {
-    if (pos.x > boxPos.x && pos.y < boxPos.y && pos.z > boxPos.z) return 0;
-    if (pos.x < boxPos.x && pos.y < boxPos.y && pos.z > boxPos.z) return 1;
-    if (pos.x < boxPos.x && pos.y < boxPos.y && pos.z < boxPos.z) return 2;
-    if (pos.x > boxPos.x && pos.y < boxPos.y && pos.z < boxPos.z) return 3;
+    if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z) return 0;
+    if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z) return 1;
+    if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z) return 2;
+    if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z) return 3;
 
-    if (pos.x > boxPos.x && pos.y > boxPos.y && pos.z > boxPos.z) return 4;
-    if (pos.x < boxPos.x && pos.y > boxPos.y && pos.z > boxPos.z) return 5;
-    if (pos.x < boxPos.x && pos.y > boxPos.y && pos.z < boxPos.z) return 6;
-    if (pos.x > boxPos.x && pos.y > boxPos.y && pos.z < boxPos.z) return 7;
+    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z) return 4;
+    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z) return 5;
+    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z) return 6;
+    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z) return 7;
 
     return 9;
 }
@@ -168,6 +169,95 @@ float3 getNormal(float3 boxPos, float3 pos)
     return sign(v.z) * float3(0, 0, 1);
 }
 
+uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex)
+{
+    float4 prev = getChildBox(boxPos, rootScale, prevIndex);
+    float3 norm = getNormal(prev.xyz, pos);
+    
+    if (prevIndex == 0)
+    {
+        if (norm.x < 0.0)
+            return 1;
+        if (norm.y > 0.0)
+            return 4;
+        if (norm.z < 0.0)
+            return 3;
+    }
+    
+    if (prevIndex == 1)
+    {
+        if (norm.x > 0.0)
+            return 0;
+        if (norm.y > 0.0)
+            return 5;
+        if (norm.z < 0.0)
+            return 2;
+    }
+    
+    if (prevIndex == 2)
+    {
+        if (norm.x > 0.0)
+            return 3;
+        if (norm.y > 0.0)
+            return 6;
+        if (norm.z > 0.0)
+            return 1;
+    }
+    
+    if (prevIndex == 3)
+    {
+        if (norm.x < 0.0)
+            return 2;
+        if (norm.y > 0.0)
+            return 7;
+        if (norm.z > 0.0)
+            return 0;
+    }
+    
+    //top row
+    if (prevIndex == 4)
+    {
+        if (norm.x < 0.0)
+            return 5;
+        if (norm.y < 0.0)
+            return 0;
+        if (norm.z < 0.0)
+            return 7;
+    }
+    
+    if (prevIndex == 5)
+    {
+        if (norm.x > 0.0)
+            return 4;
+        if (norm.y < 0.0)
+            return 1;
+        if (norm.z < 0.0)
+            return 6;
+    }
+    
+    if (prevIndex == 6)
+    {
+        if (norm.x > 0.0)
+            return 7;
+        if (norm.y < 0.0)
+            return 2;
+        if (norm.z > 0.0)
+            return 5;
+    }
+    
+    if (prevIndex == 7)
+    {
+        if (norm.x < 0.0)
+            return 6;
+        if (norm.y < 0.0)
+            return 3;
+        if (norm.z > 0.0)
+            return 4;
+    }
+    
+    return 9;
+}
+
 float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 {
     float x = position.x - 640.0;
@@ -189,7 +279,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float tMin = 0;
 	
     float3 dirLight = float3(0, 1, -1);
-    float3 movingLight = float3(200*sin(Time), 150, -0);
+    float3 movingLight = float3(200*sin(Time), 300, -0);
 
     float2 lightRet = raytraceBox(movingLight, 10, cameraPos, dir);
     if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
@@ -197,30 +287,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 rootPos = float3(0, 0, 0);
     float rootScale = 256.0;
 
-    //if (getValidMask(Elements[0].masks, childHitIndex) > 0 && getLeafMask(Elements[0].masks, childHitIndex) > 0)
-    //{
-    //    float4 child = getChildBox(rootPos, rootScale, childHitIndex);
-    //
-    //    float3 voxNorm = getNormal(child.xyz, pos);
-    //    float3 voxColor = float3(1, 0, 0) * clamp(dot(voxNorm, normalize(dirLight)), 0, 1);
-    //    voxColor += float3(1, 0, 0) * (clamp(dot(voxNorm, normalize(movingLight - pos)), 0, 1) / length(movingLight - pos)) * 1.5;
-    //
-    //    return float4(voxColor, 1);
-    //}
-    //else
     {
         float4 child = float4(rootPos, rootScale);// getChildBox(rootPos, rootScale, childHitIndex);
         float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
-
-        //if (retChild.x > 0.0) return float4(1, 0, 0, 1);
-        //else if (retChild.x <= 0.0 && retChild.y > 0.0) return float4(0, 1, 0, 1);
-
-        //if (retChild.x < 0.0 && retChild.y < 0.0)
-        //{
-        //    float temp = retChild.x;
-        //    retChild.x = retChild.y;
-        //    retChild.y = temp;
-        //}
         
         float rootExit = retChild.y;
         float exitMax = retChild.y;
@@ -228,7 +297,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
         if(retChild.x <= 0.0 && retChild.y <= 0.0) return float4(0.3, 0, 0, 1);
 
-        float3 childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.999995 : 1.000025));
+        float3 childPos = cameraPos + (retChild.x * dir);
 
         uint childHitIndex = getChildIndex(rootPos, childPos);
         if (childHitIndex > 7)
@@ -247,10 +316,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             //if (retChild.y == 0) return float4(1, 1, 0, 1);
             //if (retChild.x == 0) return float4(1, 1, 1, 1);
 
-            childPos = cameraPos + (retChild.x * dir * (retChild.x < 0 ? 0.999995 : 1.0));
-            float3 childPosMax = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
+            childPos = cameraPos + (retChild.x * dir);
+            float3 childPosMax = cameraPos + (retChild.y * dir);
 
-            if (steps > 1000) return float4(retChild.x*20.0, 0, 0, 1);
+            if (steps > 1000) return float4(1, 0, 0, 1);
             //if (stackIndex > 2) return float4(1, 0, 0, 1);
 
             //if (retChild.y < 0.0) return float4(1, 1, 0, 1);
@@ -274,6 +343,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     parent.scale = rootScale;
                     parent.exit = rootExit;
                     parent.index = rootIndex;
+                    parent.childIndex = childHitIndex;
                     stack[stackIndex++] = parent;
 
                     rootPos = child.xyz;
@@ -284,7 +354,8 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
                     //return float4(rootIndex, 0, 0, 1);
                     
-                    childHitIndex = getChildIndex(rootPos, childPos);
+                    float3 downChild = cameraPos + (retChild.x * dir);
+                    childHitIndex = getChildIndex(rootPos, downChild);
                     if (childHitIndex > 7)
                         return float4(1, 1, 1, 1);
 
@@ -309,9 +380,23 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootExit = stack[stackIndex].exit;
                     rootIndex = stack[stackIndex].index;
 
-                    childHitIndex = getChildIndex(rootPos, childPosMax);
-                    if (childHitIndex > 7)
-                        return float4(1, 1, 0, 1);
+                    //float3 upChild = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
+                    childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
+                    while (childHitIndex > 7 && stackIndex >= 1)
+                    {
+                        --stackIndex;
+                        rootPos = stack[stackIndex].pos;
+                        rootScale = stack[stackIndex].scale;
+                        rootExit = stack[stackIndex].exit;
+                        rootIndex = stack[stackIndex].index;
+
+                    //float3 upChild = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
+                        childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
+                    }
+                        
+                    //    return float4(1, 0, 1, 1);
+                    //if (childHitIndex > 7)
+                    //    return float4(1, 1, 0, 1);
 
                     indexPos = childPosMax;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
@@ -323,10 +408,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 //return float4(0, 1, 0, 1);
                 //if (retChild.y < 0.0) return float4(0, 1, 0, 1);
-                childHitIndex = getChildIndex(rootPos, childPosMax);
+                childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex);
                 
-                if (childHitIndex > 7)
-                    return float4(0, 1, 0, 1);
+                //if (childHitIndex > 7)
+                //    return float4(0, 1, 0, 1);
                 
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
@@ -339,7 +424,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         {
             float3 voxNorm = getNormal(child.xyz, indexPos);
             float3 voxColor = float3(0, 0.3, 0) * clamp(dot(voxNorm, normalize(dirLight)), 0, 1);
-            voxColor += float3(0, 0.3, 0) * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1) / length(movingLight - indexPos)) * 1.5) * 100.0f;
+            voxColor += float3(0, 0.3, 0) * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1) / length(movingLight - indexPos)) * 1.5) * 500.0f;
 
             return float4(voxColor, 1);
         }
