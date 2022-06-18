@@ -27,7 +27,12 @@ cbuffer CameraInfo : register(b0)
 
 cbuffer SVOInfo : register(b1)
 {
-    SVOElement Elements[64];
+    SVOElement Elements[4096];
+};
+
+cbuffer SVOInfo1 : register(b2)
+{
+    SVOElement Elements1[4096];
 };
 
 float calculateT(float plane, float origin, float direction)
@@ -285,7 +290,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
 
     float3 rootPos = float3(0, 0, 0);
-    float rootScale = 256.0;
+    float rootScale = 128.0;
 
     {
         float4 child = float4(rootPos, rootScale);// getChildBox(rootPos, rootScale, childHitIndex);

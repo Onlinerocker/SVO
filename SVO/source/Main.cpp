@@ -5,6 +5,7 @@
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <chrono>
+#include <random>
 
 #include "glm/glm.hpp"
 
@@ -42,6 +43,31 @@ struct InputData
 	bool d{ false };
 };
 
+uint8_t* createWorld()
+{
+	const size_t size = 256 * 256 * 256;
+	uint8_t* buffer = (uint8_t*)malloc(size);
+	unsigned int seed = 55;//(unsigned int)std::chrono::high_resolution_clock::now().time_since_epoch().count()
+	std::srand(seed);
+	
+	assert(buffer != nullptr);
+
+	for (size_t ind = 0; ind < size; ++ind)
+	{
+		int val = std::rand() % 10;
+		if (val <= 8) buffer[ind] = 0;
+		else buffer[ind] = 1;
+	}
+
+	return buffer;
+}
+
+char getBlockAt(char* world, size_t x, size_t y, size_t z)
+{
+	assert(world != nullptr);
+	return world[x + (y * 256) + (z * 256 * 256)];
+}
+
 int main()
 {
 	printf("Starting Up...\n");
@@ -62,46 +88,52 @@ int main()
 	float frameTime = 0.0f;
 	int mouseX = 0;
 	int mouseY = 0;
+	uint8_t* worldData = createWorld();
 
-	//SVO::Element root{ 1, static_cast<uint32_t>(0b00101011 << 24) | (0b00000011 << 16) };
-	//
-	//SVO::Element child{ 1,  static_cast<uint32_t>(0b10111111 << 24) | (0b11111111 << 16) };
-	//SVO::Element child1{ 1, static_cast<uint32_t>(0b01111111 << 24) | (0b10111111 << 16) };
+	struct Block
+	{
+		size_t index;
+		int depth;
+	};
 
-	int max = 10;
+	int max = 4;
+	int blockInd = 0;
 	SVO svo(max + 1);
 
-	SVO::Element root{ 123, static_cast<uint32_t>(0b00110111 << 24) | (0b00000111 << 16) };
+	std::vector<Block> createStack;
+
+	SVO::Element root{ 1, static_cast<uint32_t>(0b11111111 << 24) | (0b00000000 << 16) };
 	svo.vec().push_back(root);
-	//svo.vec().push_back(child);
-	//svo.vec().push_back(child1);
-
 	
-	for (int i = 0; i <= max; ++i)
+	Block begin{ 0, 0 };
+	createStack.push_back(begin);
+
+	while (createStack.size() > 0)
 	{
-		svo.vec().back().childPtr = (uint32_t)svo.vec().size()+1;
-		if(i > 0) svo.vec()[svo.vec().size()-2].childPtr = (uint32_t)svo.vec().size();
+		Block cur = createStack.back();
+		createStack.pop_back();
 
-		if (i == max)
+		if (cur.depth >= max)
 		{
-			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00100111 << 16) };
-			svo.vec().push_back(newChild);
-		}
-		else
-		{
-			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00000111 << 16) };
-			svo.vec().push_back(newChild);
+			for (int i = 0; i < 8; ++i)
+			{
+				uint32_t mask = worldData[blockInd++] << i;
+				svo.vec()[cur.index].masks |= (mask << 24);
+			}
+			continue;
 		}
 
-		if (i == max)
+		svo.vec()[cur.index].childPtr = (uint32_t)svo.vec().size();
+		for (int i = 0; i < 8; ++i)
 		{
-			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00100111 << 16) };
-			svo.vec().push_back(newChild);
-		}
-		else
-		{
-			SVO::Element newChild{ 123, static_cast<uint32_t>(0b00100111 << 24) | (0b00000111 << 16) };
-			svo.vec().push_back(newChild);
+			SVO::Element item{ 123, static_cast<uint32_t>(0b11111111 << 24) | (0b00000000 << 16) };
+			if (cur.depth + 1 >= max)
+			{
+				item.masks = 0;
+				item.masks |= static_cast<uint32_t>(0b11111111 << 16);
+			}
+			svo.vec().push_back(item);
+			createStack.push_back({ svo.vec().size() - 1, cur.depth + 1 });
 		}
 	}
 
@@ -254,7 +286,7 @@ int main()
 	createConstantBuffer(&constBuffers[0], &appInfo, 64);
 
 	//Setup and load svo constant buffer
-	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * (UINT)svo.vec().size());
+	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * ((UINT)svo.vec().size()));
 		//svo.data().size() < 64 ? (UINT)svo.data().size() * (UINT)sizeof(SVO::Element) : 64 * (UINT)sizeof(SVO::Element)); //max of 64 elements, for now
 
 	devCon->PSSetConstantBuffers(0, constBufferCount, constBuffers);
