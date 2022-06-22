@@ -4,6 +4,8 @@ struct SVOElement
 {
     uint childPointer;
     uint masks;
+    uint pad;
+    uint pad1;
 };
 
 struct ParentElement
@@ -27,13 +29,10 @@ cbuffer CameraInfo : register(b0)
 
 cbuffer SVOInfo : register(b1)
 {
-    SVOElement Elements[4096];
-};
-
-cbuffer SVOInfo1 : register(b2)
-{
     SVOElement Elements1[4096];
 };
+
+StructuredBuffer<SVOElement> Elements : register(t0);
 
 float calculateT(float plane, float origin, float direction)
 {
@@ -263,13 +262,21 @@ uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevInde
     return 9;
 }
 
+bool isInside(float3 pos, float3 posRoot, float scale)
+{
+    return pos.x <= posRoot.x + scale && pos.x >= posRoot.x - scale &&
+        pos.y <= posRoot.y + scale && pos.y >= posRoot.y - scale &&
+        pos.z <= posRoot.z + scale && pos.z >= posRoot.z - scale;
+
+}
+
 float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 {
-    float x = position.x - 640.0;
-    x /= 640.0;
+    float x = position.x - 960.0;
+    x /= 960.0;
 
-    float y = position.y - 360.0;
-    y /= -360.0;
+    float y = position.y - 540.0;
+    y /= -540.0;
 
     x *= (1280.0 / 720.0);
 
@@ -284,13 +291,13 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float tMin = 0;
 	
     float3 dirLight = float3(0, 1, -1);
-    float3 movingLight = float3(200*sin(Time), 300, -0);
+    float3 movingLight = float3(512.0 /*200*sin(Time)*/, 300, -0);
 
     float2 lightRet = raytraceBox(movingLight, 10, cameraPos, dir);
     if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
 
     float3 rootPos = float3(0, 0, 0);
-    float rootScale = 128.0;
+    float rootScale = 256.0;
 
     {
         float4 child = float4(rootPos, rootScale);// getChildBox(rootPos, rootScale, childHitIndex);
@@ -300,7 +307,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         float exitMax = retChild.y;
         uint rootIndex = 0;
 
-        if(retChild.x <= 0.0 && retChild.y <= 0.0) return float4(0.3, 0, 0, 1);
+        float4 noHitColor = float4(0.2, 0.2, 0.2, 1);
+        float4 escapeColor = noHitColor;
+        
+        if(retChild.x <= 0.0 && retChild.y <= 0.0) return noHitColor;
 
         float3 childPos = cameraPos + (retChild.x * dir);
 
@@ -324,13 +334,13 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             childPos = cameraPos + (retChild.x * dir);
             float3 childPosMax = cameraPos + (retChild.y * dir);
 
-            if (steps > 1000) return float4(1, 0, 0, 1);
+            if (steps > 500) return float4(0, 0, 0, 1);
             //if (stackIndex > 2) return float4(1, 0, 0, 1);
 
             //if (retChild.y < 0.0) return float4(1, 1, 0, 1);
             //if (retChild.y < 0.0) return float4(abs(retChild.y) / 100.0f, abs(retChild.x)/100.0f, 0, 1);
 
-            if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0)
+            if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
                 if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0)
                 {
@@ -376,7 +386,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             
             if (retChild.y >= rootExit)
             {
-                if (retChild.y >= exitMax) return float4(0.3, 0, 0.3, 1);
+                if (retChild.y >= exitMax) return escapeColor;
                 else
                 {
                     --stackIndex;
@@ -428,9 +438,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         if (!didNotHit)
         {
             float3 voxNorm = getNormal(child.xyz, indexPos);
-            float3 voxColor = float3(0, 0.3, 0) * clamp(dot(voxNorm, normalize(dirLight)), 0, 1);
-            voxColor += float3(0, 0.3, 0) * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1) / length(movingLight - indexPos)) * 1.5) * 500.0f;
-
+            float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
+            float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
+            voxColor += diffColor * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
+            voxColor += diffColor * ((clamp(dot(voxNorm, normalize(-movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
+            voxColor += diffColor * ((clamp(dot(voxNorm, normalize(float3(0, 0, movingLight.x) - indexPos)), 0, 1)) * 1.5) * 1.0f;
+            
+            //voxColor.g = saturate(voxColor.g);
+            
             return float4(voxColor, 1);
         }
     }

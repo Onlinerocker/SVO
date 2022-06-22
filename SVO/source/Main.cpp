@@ -45,17 +45,17 @@ struct InputData
 
 uint8_t* createWorld()
 {
-	const size_t size = 256 * 256 * 256;
+	const size_t size = 512 * 512 * 512;
 	uint8_t* buffer = (uint8_t*)malloc(size);
-	unsigned int seed = 55;//(unsigned int)std::chrono::high_resolution_clock::now().time_since_epoch().count()
+	unsigned int seed = (unsigned int)std::chrono::high_resolution_clock::now().time_since_epoch().count();
 	std::srand(seed);
 	
 	assert(buffer != nullptr);
 
 	for (size_t ind = 0; ind < size; ++ind)
 	{
-		int val = std::rand() % 10;
-		if (val <= 8) buffer[ind] = 0;
+		int val = std::rand() % 100;
+		if (val <= 95) buffer[ind] = 0;
 		else buffer[ind] = 1;
 	}
 
@@ -73,8 +73,8 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
-	const int32_t width = 1280;
-	const int32_t height = 720;
+	const int32_t width = 1920;
+	const int32_t height = 1080;
 	float flightSpeed = 100.0f;
 
 	Camera camera;
@@ -96,8 +96,10 @@ int main()
 		int depth;
 	};
 
-	int max = 4;
+	int max = 8;
 	int blockInd = 0;
+	int voxelCount = 0;
+	int voxelTotal = 0;
 	SVO svo(max + 1);
 
 	std::vector<Block> createStack;
@@ -117,6 +119,8 @@ int main()
 		{
 			for (int i = 0; i < 8; ++i)
 			{
+				if(worldData[blockInd] > 0) ++voxelCount;
+				++voxelTotal;
 				uint32_t mask = worldData[blockInd++] << i;
 				svo.vec()[cur.index].masks |= (mask << 24);
 			}
@@ -294,8 +298,38 @@ int main()
 	devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 	devCon->UpdateSubresource(constBuffers[1], 0, nullptr, svo.vec().data(), 0, 0);
 
-	//ID3D11Buffer* buffers;
-	//devCon->PSGetConstantBuffers(0, 2, &buffers);
+	//Structured buffer setup
+	//https://www.gamedev.net/forums/topic/709796-working-with-structuredbuffer-in-hlsl-directx-11/
+	ID3D11Buffer* structuredBuffer = nullptr;
+	ID3D11ShaderResourceView* structuredRscView = nullptr;
+	D3D11_BUFFER_DESC structBuffDesc;
+	D3D11_SHADER_RESOURCE_VIEW_DESC structuredRscDesc;
+	D3D11_MAPPED_SUBRESOURCE mappedStructuredBuffer;
+
+	structBuffDesc.ByteWidth = sizeof(SVO::Element) * ((UINT)svo.vec().size());
+	structBuffDesc.Usage = D3D11_USAGE_DYNAMIC;
+	structBuffDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	structBuffDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	structBuffDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	structBuffDesc.StructureByteStride = sizeof(SVO::Element);
+
+	dev->CreateBuffer(&structBuffDesc, nullptr, &structuredBuffer);
+	assert(structuredBuffer != nullptr);
+
+	structuredRscDesc.Format = DXGI_FORMAT_UNKNOWN;
+	structuredRscDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	structuredRscDesc.Buffer.FirstElement = 0;
+	structuredRscDesc.Buffer.NumElements = (UINT)svo.vec().size();
+
+	dev->CreateShaderResourceView(structuredBuffer, &structuredRscDesc, &structuredRscView);
+	assert(structuredRscView != nullptr);
+
+	devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedStructuredBuffer);
+	memcpy(mappedStructuredBuffer.pData, svo.vec().data(), structBuffDesc.ByteWidth);
+	devCon->Unmap(structuredBuffer, 0);
+	devCon->PSSetShaderResources(0, 1, &structuredRscView);
+
+	free(worldData);
 
 	//DearImGui setup
 	ImGui::CreateContext();
@@ -312,7 +346,7 @@ int main()
 		appInfo.time += deltaTimeSec;
 
 		++frameCount;
-		if (frameCount == 1000)
+		if (frameCount == 100)
 		{
 			fps = 1000000.0f / static_cast<float>(deltaTime.count());
 			frameTime = static_cast<float>(deltaTime.count()) / 1000.0f;
@@ -442,6 +476,8 @@ int main()
 
 		ImGui::Begin("Debug");
 		ImGui::Text("[Flight Controls] WASD, right click + mouse");
+		ImGui::Text("%d voxels filled", voxelCount);
+		ImGui::Text("%d voxels total", voxelTotal);
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
 		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
