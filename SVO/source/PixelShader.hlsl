@@ -43,9 +43,6 @@ float calculateT(float plane, float origin, float direction)
 //https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
 float2 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDirection)
 {
-    float4 bg = float4(0.3, 0.3, 0.3, 1);
-    float4 diffuse = float4(194.0 / 255.0, 249.0 / 255.0, 224.0 / 255.0, 1);
-	
     float3 boxMin = boxPos - float3(boxRad, boxRad, boxRad);
     float3 boxMax = boxPos + float3(boxRad, boxRad, boxRad);
 	
@@ -294,7 +291,6 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 movingLight = float3(512.0 /*200*sin(Time)*/, 300, -0);
 
     float2 lightRet = raytraceBox(movingLight, 10, cameraPos, dir);
-    if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
 
     float3 rootPos = float3(0, 0, 0);
     float rootScale = 256.0;
@@ -437,6 +433,8 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
         if (!didNotHit)
         {
+            if ((lightRet.x < retChild.x && lightRet.x > 0.0)) return float4(1, 1, 1, 1);
+
             float3 voxNorm = getNormal(child.xyz, indexPos);
             float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
             float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
@@ -450,6 +448,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
     }
 
+    if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
     return float4(0.3, 0.0, 0.3, 1);
 
 }
