@@ -43,6 +43,9 @@ float calculateT(float plane, float origin, float direction)
 //https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
 float2 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDirection)
 {
+    float4 bg = float4(0.3, 0.3, 0.3, 1);
+    float4 diffuse = float4(194.0 / 255.0, 249.0 / 255.0, 224.0 / 255.0, 1);
+	
     float3 boxMin = boxPos - float3(boxRad, boxRad, boxRad);
     float3 boxMax = boxPos + float3(boxRad, boxRad, boxRad);
 	
@@ -115,22 +118,31 @@ uint getChildPointer(SVOElement parentElement, uint index)
     uint curPos = 0;
     for (uint i = 0; i < index; ++i)
     {
-        if (getValidMask(parentElement.masks, i) > 0 && !getLeafMask(parentElement.masks, i) > 0) ++curPos;
+        if (getValidMask(parentElement.masks, i) > 0 && !getLeafMask(parentElement.masks, i) > 0)
+            ++curPos;
     }
     return parentElement.childPointer + curPos;
 }
 
 uint getChildIndex(float3 boxPos, float3 pos)
 {
-    if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z) return 0;
-    if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z) return 1;
-    if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z) return 2;
-    if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z) return 3;
+    if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
+        return 0;
+    if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
+        return 1;
+    if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z)
+        return 2;
+    if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z)
+        return 3;
 
-    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z) return 4;
-    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z) return 5;
-    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z) return 6;
-    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z) return 7;
+    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
+        return 4;
+    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
+        return 5;
+    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
+        return 6;
+    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
+        return 7;
 
     return 9;
 }
@@ -139,15 +151,23 @@ float4 getChildBox(float3 rootPos, float rootScale, uint index)
 {
     float newScale = rootScale * 0.5;
 
-    if (index == 0) return float4(rootPos + float3(newScale, -newScale, newScale), newScale);
-    if (index == 1) return float4(rootPos + float3(-newScale, -newScale, newScale), newScale);
-    if (index == 2) return float4(rootPos + float3(-newScale, -newScale, -newScale), newScale);
-    if (index == 3) return float4(rootPos + float3(newScale, -newScale, -newScale), newScale);
+    if (index == 0)
+        return float4(rootPos + float3(newScale, -newScale, newScale), newScale);
+    if (index == 1)
+        return float4(rootPos + float3(-newScale, -newScale, newScale), newScale);
+    if (index == 2)
+        return float4(rootPos + float3(-newScale, -newScale, -newScale), newScale);
+    if (index == 3)
+        return float4(rootPos + float3(newScale, -newScale, -newScale), newScale);
 
-    if (index == 4) return float4(rootPos + float3(newScale, newScale, newScale), newScale);
-    if (index == 5) return float4(rootPos + float3(-newScale, newScale, newScale), newScale);
-    if (index == 6) return float4(rootPos + float3(-newScale, newScale, -newScale), newScale);
-    if (index == 7) return float4(rootPos + float3(newScale, newScale, -newScale), newScale);
+    if (index == 4)
+        return float4(rootPos + float3(newScale, newScale, newScale), newScale);
+    if (index == 5)
+        return float4(rootPos + float3(-newScale, newScale, newScale), newScale);
+    if (index == 6)
+        return float4(rootPos + float3(-newScale, newScale, -newScale), newScale);
+    if (index == 7)
+        return float4(rootPos + float3(newScale, newScale, -newScale), newScale);
 
     return float4(0, 0, 0, 0);
 }
@@ -290,13 +310,11 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 dirLight = float3(0, 1, -1);
     float3 movingLight = float3(512.0 /*200*sin(Time)*/, 300, -0);
 
-    float2 lightRet = raytraceBox(movingLight, 10, cameraPos, dir);
-
     float3 rootPos = float3(0, 0, 0);
     float rootScale = 256.0;
 
     {
-        float4 child = float4(rootPos, rootScale);// getChildBox(rootPos, rootScale, childHitIndex);
+        float4 child = float4(rootPos, rootScale);
         float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
         
         float rootExit = retChild.y;
@@ -304,9 +322,16 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         uint rootIndex = 0;
 
         float4 noHitColor = float4(0.2, 0.2, 0.2, 1);
-        float4 escapeColor = noHitColor;
+        float4 escapeColor = float4(0.3, 0, 0.3, 1);
         
-        if(retChild.x <= 0.0 && retChild.y <= 0.0) return noHitColor;
+        float2 lightRet = raytraceBox(movingLight, 10, cameraPos, dir);
+        
+        if (retChild.x <= 0.0 && retChild.y <= 0.0)
+        {
+            if (lightRet.x >= 0.0)
+                return float4(1, 1, 1, 1);
+            return noHitColor;
+        }
 
         float3 childPos = cameraPos + (retChild.x * dir);
 
@@ -324,31 +349,21 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         {
             float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
 
-            //if (retChild.y == 0) return float4(1, 1, 0, 1);
-            //if (retChild.x == 0) return float4(1, 1, 1, 1);
-
             childPos = cameraPos + (retChild.x * dir);
             float3 childPosMax = cameraPos + (retChild.y * dir);
 
-            if (steps > 500) return float4(0, 0, 0, 1);
-            //if (stackIndex > 2) return float4(1, 0, 0, 1);
-
-            //if (retChild.y < 0.0) return float4(1, 1, 0, 1);
-            //if (retChild.y < 0.0) return float4(abs(retChild.y) / 100.0f, abs(retChild.x)/100.0f, 0, 1);
+            if (steps > 500)
+                return float4(0, 0, 0, 1);
 
             if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
                 if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0)
                 {
-                    //if (stackIndex > 0) return float4(1, 0, 0, 1);
-                    //return float4(0, 1, 0, 1);
                     didNotHit = false;
                     break;
                 }
                 else if (!getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0)
                 {
-                    //return float4(0, 1, 0, 1);
-                    
                     ParentElement parent;
                     parent.pos = rootPos;
                     parent.scale = rootScale;
@@ -363,8 +378,6 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootExit = retChild.y;
                     rootIndex = getChildPointer(Elements[rootIndex], childHitIndex);
 
-                    //return float4(rootIndex, 0, 0, 1);
-                    
                     float3 downChild = cameraPos + (retChild.x * dir);
                     childHitIndex = getChildIndex(rootPos, downChild);
                     if (childHitIndex > 7)
@@ -373,16 +386,18 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     indexPos = childPos;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
 
-                    //if (childHitIndex == 0) return float4(0, 0, 1, 1);
-
-                    //++steps;
                     continue;
                 }
             }
             
             if (retChild.y >= rootExit)
             {
-                if (retChild.y >= exitMax) return escapeColor;
+                if (retChild.y >= exitMax)
+                {
+                    if (lightRet.x >= 0.0)
+                        return float4(1, 1, 1, 1);
+                    return escapeColor;
+                }
                 else
                 {
                     --stackIndex;
@@ -391,7 +406,6 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootExit = stack[stackIndex].exit;
                     rootIndex = stack[stackIndex].index;
 
-                    //float3 upChild = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
                     childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
                     while (childHitIndex > 7 && stackIndex >= 1)
                     {
@@ -401,40 +415,26 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                         rootExit = stack[stackIndex].exit;
                         rootIndex = stack[stackIndex].index;
 
-                    //float3 upChild = cameraPos + (retChild.y * dir * (retChild.y < 0 ? 0.999995 : 1.000025));
                         childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
                     }
                         
-                    //    return float4(1, 0, 1, 1);
-                    //if (childHitIndex > 7)
-                    //    return float4(1, 1, 0, 1);
-
                     indexPos = childPosMax;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
-
-                    //return float4(1, 1, 0, 1);
                 }
             }
             else
             {
-                //return float4(0, 1, 0, 1);
-                //if (retChild.y < 0.0) return float4(0, 1, 0, 1);
                 childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex);
-                
-                //if (childHitIndex > 7)
-                //    return float4(0, 1, 0, 1);
-                
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
-                //if (stackIndex > 0) ++steps;
             }
 
             ++steps;
         }
         if (!didNotHit)
         {
-            if ((lightRet.x < retChild.x && lightRet.x > 0.0)) return float4(1, 1, 1, 1);
-
+            if (lightRet.x < retChild.x && lightRet.x >= 0.0)
+                return float4(1, 1, 1, 1);
             float3 voxNorm = getNormal(child.xyz, indexPos);
             float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
             float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
@@ -442,13 +442,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(-movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(float3(0, 0, movingLight.x) - indexPos)), 0, 1)) * 1.5) * 1.0f;
             
-            //voxColor.g = saturate(voxColor.g);
-            
             return float4(voxColor, 1);
         }
     }
-
-    if (lightRet.x >= 0.0) return float4(1, 1, 1, 1);
-    return float4(0.3, 0.0, 0.3, 1);
+    
+    return float4(0.3, 0.3, 0.3, 1);
 
 }
