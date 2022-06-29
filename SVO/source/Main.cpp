@@ -304,10 +304,10 @@ int main()
 	ID3D11ShaderResourceView* structuredRscView = nullptr;
 	D3D11_BUFFER_DESC structBuffDesc;
 	D3D11_SHADER_RESOURCE_VIEW_DESC structuredRscDesc;
-	D3D11_MAPPED_SUBRESOURCE mappedStructuredBuffer;
+	//D3D11_MAPPED_SUBRESOURCE mappedStructuredBuffer;
 
 	structBuffDesc.ByteWidth = sizeof(SVO::Element) * ((UINT)svo.vec().size());
-	structBuffDesc.Usage = D3D11_USAGE_DYNAMIC;
+	structBuffDesc.Usage = D3D11_USAGE_DEFAULT;
 	structBuffDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	structBuffDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 	structBuffDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
@@ -324,10 +324,20 @@ int main()
 	dev->CreateShaderResourceView(structuredBuffer, &structuredRscDesc, &structuredRscView);
 	assert(structuredRscView != nullptr);
 
-	devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedStructuredBuffer);
-	memcpy(mappedStructuredBuffer.pData, svo.vec().data(), structBuffDesc.ByteWidth);
-	devCon->Unmap(structuredBuffer, 0);
+	//devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedStructuredBuffer);
+	//memcpy(mappedStructuredBuffer.pData, svo.vec().data(), structBuffDesc.ByteWidth);
+	//devCon->Unmap(structuredBuffer, 0);
+	D3D11_BOX destRegion;
+	destRegion.left = 0;
+	destRegion.right = (int)svo.vec().size() / 2;
+	destRegion.top = 0;
+	destRegion.bottom = 1;
+	destRegion.front = 0;
+	destRegion.back = 1;
+	devCon->UpdateSubresource(structuredBuffer, 0, nullptr, svo.vec().data(), 0, 0);
 	devCon->PSSetShaderResources(0, 1, &structuredRscView);
+
+	
 
 	free(worldData);
 
@@ -339,18 +349,40 @@ int main()
 	ImGui_ImplDX11_Init(dev, devCon);
 
 	int frameCount = 0;
+	float totalSeconds = 0.0f;
 	while (true)
 	{
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
 		deltaTimeSec = (static_cast<float>(deltaTime.count()) / 1000000.0f);
 		appInfo.time += deltaTimeSec;
+		totalSeconds += deltaTimeSec;
 
 		++frameCount;
 		if (true)
 		{
 			fps = 1000000.0f / static_cast<float>(deltaTime.count());
 			frameTime = static_cast<float>(deltaTime.count()) / 1000.0f;
-			frameCount = 0;
+			//frameCount = 0;
+		}
+
+		if (totalSeconds >= 3.0f)
+		{
+			printf("switch\n");
+			totalSeconds = 0.0f;
+			//D3D11_MAPPED_SUBRESOURCE tempMappedStructuredBuffer;
+			//svo.vec().data()[0].masks ^= (0b11111111 << 24);
+			//devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &tempMappedStructuredBuffer);
+			//memcpy(tempMappedStructuredBuffer.pData, svo.vec().data(), sizeof(SVO::Element));
+			//devCon->Unmap(structuredBuffer, 0);
+			D3D11_BOX destRegion1;
+			destRegion1.left = 4;
+			destRegion1.right = 8;
+			destRegion1.top = 0;
+			destRegion1.bottom = 1;
+			destRegion1.front = 0;
+			destRegion1.back = 1;
+			svo.vec().data()[0].masks ^= (0b10000000 << 24);
+			devCon->UpdateSubresource(structuredBuffer, 0, &destRegion1, &svo.vec().data()[0].masks, 0, 0);
 		}
 
 		startTime = std::chrono::high_resolution_clock::now();
