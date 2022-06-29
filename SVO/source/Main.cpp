@@ -290,13 +290,13 @@ int main()
 	createConstantBuffer(&constBuffers[0], &appInfo, 64);
 
 	//Setup and load svo constant buffer
-	createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * ((UINT)svo.vec().size()));
-		//svo.data().size() < 64 ? (UINT)svo.data().size() * (UINT)sizeof(SVO::Element) : 64 * (UINT)sizeof(SVO::Element)); //max of 64 elements, for now
+	//createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * ((UINT)svo.vec().size()));
+	//svo.data().size() < 64 ? (UINT)svo.data().size() * (UINT)sizeof(SVO::Element) : 64 * (UINT)sizeof(SVO::Element)); //max of 64 elements, for now
 
-	devCon->PSSetConstantBuffers(0, constBufferCount, constBuffers);
+	devCon->PSSetConstantBuffers(0, 1, constBuffers);
 
 	devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
-	devCon->UpdateSubresource(constBuffers[1], 0, nullptr, svo.vec().data(), 0, 0);
+	//devCon->UpdateSubresource(constBuffers[1], 0, nullptr, svo.vec().data(), 0, 0);
 
 	//Structured buffer setup
 	//https://www.gamedev.net/forums/topic/709796-working-with-structuredbuffer-in-hlsl-directx-11/
@@ -346,7 +346,7 @@ int main()
 		appInfo.time += deltaTimeSec;
 
 		++frameCount;
-		if (frameCount == 100)
+		if (true)
 		{
 			fps = 1000000.0f / static_cast<float>(deltaTime.count());
 			frameTime = static_cast<float>(deltaTime.count()) / 1000.0f;

@@ -4,8 +4,8 @@ struct SVOElement
 {
     uint childPointer;
     uint masks;
-    uint pad;
-    uint pad1;
+    //uint pad;
+    //uint pad1;
 };
 
 struct ParentElement
@@ -442,10 +442,12 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(-movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(float3(0, 0, movingLight.x) - indexPos)), 0, 1)) * 1.5) * 1.0f;
             
+            //return lerp(float4(voxColor, 1), noHitColor, saturate(retChild.x / 100.0f));
             return float4(voxColor, 1);
+
         }
     }
     
-    return float4(0.3, 0.3, 0.3, 1);
+    return float4(0.2, 0.2, 0.2, 1);
 
 }

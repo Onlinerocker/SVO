@@ -33,8 +33,8 @@ public:
 	struct Element
 	{
 		uint32_t childPtr;  //relative pointer to children in SVO
-		uint32_t masks;
-		uint64_t padding;
+		uint32_t masks; //8 most sig bits = valid mask, next 8 bits = leaf mask
+		//uint64_t padding; //needed for cbuffer
 	};
 
 public:
