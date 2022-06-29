@@ -45,7 +45,7 @@ struct InputData
 
 uint8_t* createWorld()
 {
-	const size_t size = 512 * 512 * 512;
+	const size_t size = 16 * 16 * 16;
 	uint8_t* buffer = (uint8_t*)malloc(size);
 	unsigned int seed = (unsigned int)std::chrono::high_resolution_clock::now().time_since_epoch().count();
 	std::srand(seed);
@@ -55,7 +55,7 @@ uint8_t* createWorld()
 	for (size_t ind = 0; ind < size; ++ind)
 	{
 		int val = std::rand() % 100;
-		if (val <= 95) buffer[ind] = 0;
+		if (val > 100) buffer[ind] = 0;
 		else buffer[ind] = 1;
 	}
 
@@ -96,7 +96,7 @@ int main()
 		int depth;
 	};
 
-	int max = 8;
+	int max = 3;
 	int blockInd = 0;
 	int voxelCount = 0;
 	int voxelTotal = 0;
@@ -374,15 +374,15 @@ int main()
 			//devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &tempMappedStructuredBuffer);
 			//memcpy(tempMappedStructuredBuffer.pData, svo.vec().data(), sizeof(SVO::Element));
 			//devCon->Unmap(structuredBuffer, 0);
-			D3D11_BOX destRegion1;
-			destRegion1.left = 4;
-			destRegion1.right = 8;
-			destRegion1.top = 0;
-			destRegion1.bottom = 1;
-			destRegion1.front = 0;
-			destRegion1.back = 1;
-			svo.vec().data()[0].masks ^= (0b10000000 << 24);
-			devCon->UpdateSubresource(structuredBuffer, 0, &destRegion1, &svo.vec().data()[0].masks, 0, 0);
+			size_t indexToModify = 1;
+			destRegion.left = (int)(sizeof(SVO::Element) * indexToModify);
+			destRegion.right = destRegion.left + sizeof(SVO::Element);
+			destRegion.top = 0;
+			destRegion.bottom = 1;
+			destRegion.front = 0;
+			destRegion.back = 1;
+			svo.vec().data()[indexToModify].masks ^= (0b11110000 << 24);
+			devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[1], 0, 0);
 		}
 
 		startTime = std::chrono::high_resolution_clock::now();
