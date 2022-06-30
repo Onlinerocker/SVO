@@ -43,13 +43,6 @@ public:
 		//uint64_t padding; //needed for cbuffer
 	};
 
-	struct HitReturn
-	{
-		uint32_t index;
-		uint8_t childIndex{ 0 };
-		bool didHit{ false };
-	};
-
 	struct ParentElement
 	{
 		float3 pos;
@@ -57,6 +50,16 @@ public:
 		float exit;
 		uint index;
 		uint childIndex;
+	};
+
+	struct HitReturn
+	{
+		uint32_t index;
+		uint8_t childIndex{ 0 };
+		bool didHit{ false };
+
+		ParentElement stack[16];
+		uint32_t stackIndex;
 	};
 
 public:

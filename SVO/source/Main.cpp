@@ -78,7 +78,7 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
-	const size_t treeDepth = 8;
+	const size_t treeDepth = 2;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
 	float flightSpeed = 100.0f;
@@ -377,9 +377,37 @@ int main()
 			if (btn >= 2)
 			{
 				SDL_SetRelativeMouseMode(SDL_TRUE);
+				
+				SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward);
+				appInfo.hitIndex = res.index;
+				appInfo.hitChildIndex = res.childIndex;
+				appInfo.padding = res.didHit;
+
 				if (btn == 16 && appInfo.padding > 0)
 				{
-					svo.vec().data()[appInfo.hitIndex].masks ^= ((1 << appInfo.hitChildIndex) << 24);
+					uint32_t stackInd = res.stackIndex;
+					uint32_t rootIndex = appInfo.hitIndex;
+					uint32_t hitChildIndex = appInfo.hitChildIndex;
+					svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+
+					while ((svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0)
+					{
+						rootIndex = res.stack[stackInd].index;
+						hitChildIndex = res.stack[stackInd].childIndex;
+						svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+
+						destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
+						destRegion.right = destRegion.left + sizeof(SVO::Element);
+						destRegion.top = 0;
+						destRegion.bottom = 1;
+						destRegion.front = 0;
+						destRegion.back = 1;
+						devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
+
+						if (stackInd > 0) --stackInd;
+						else break;
+					}
+
 					destRegion.left = (int)(sizeof(SVO::Element) * appInfo.hitIndex);
 					destRegion.right = destRegion.left + sizeof(SVO::Element);
 					destRegion.top = 0;
@@ -482,11 +510,6 @@ int main()
 		{
 			appInfo.pos += glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
 		}
-
-		SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward);
-		appInfo.hitIndex = res.index;
-		appInfo.hitChildIndex = res.childIndex;
-		appInfo.padding = res.didHit;
 
 		const FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		devCon->ClearRenderTargetView(backbuffer, color);

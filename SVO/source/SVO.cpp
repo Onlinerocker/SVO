@@ -24,13 +24,13 @@ SVO::uint SVO::getLeafMask(uint mask, uint index)
 
 SVO::uint SVO::getChildPointer(Element parentElement, uint index)
 {
-    uint curPos = 0;
-    for (uint i = 0; i < index; ++i)
-    {
-        if (getValidMask(parentElement.masks, i) > 0 && getLeafMask(parentElement.masks, i) == 0)
-            ++curPos;
-    }
-    return parentElement.childPointer + curPos;
+    //uint curPos = 0;
+    //for (uint i = 0; i < index; ++i)
+    //{
+    //    if (getValidMask(parentElement.masks, i) > 0 && getLeafMask(parentElement.masks, i) == 0)
+    //        ++curPos;
+    //}
+    return parentElement.childPointer + index;
 }
 
 SVO::uint SVO::getChildIndex(float3 boxPos, float3 pos)
@@ -263,7 +263,7 @@ bool SVO::isInside(float3 pos, float3 posRoot, float scale)
 
 SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir)
 {
-    ParentElement stack[64];
+    ParentElement stack[16];
     uint stackIndex = 0;
 
     float3 rootPos = float3(0, 0, 0);
@@ -378,7 +378,10 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir)
         }
         if (!didNotHit)
         {
-            return { rootIndex, (uint8_t)childHitIndex, true };
+            HitReturn r = { rootIndex, (uint8_t)childHitIndex, true };
+            r.stackIndex = stackIndex - 1;
+            memcpy(r.stack, stack, 16 * sizeof(ParentElement));
+            return r;
         }
     }
 

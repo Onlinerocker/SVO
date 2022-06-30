@@ -120,13 +120,13 @@ uint getLeafMask(uint mask, uint index)
 /* Could use extra space in SVO to store this information */
 uint getChildPointer(SVOElement parentElement, uint index)
 {
-    uint curPos = 0;
-    for (uint i = 0; i < index; ++i)
-    {
-        if (getValidMask(parentElement.masks, i) > 0 && getLeafMask(parentElement.masks, i) == 0)
-            ++curPos;
-    }
-    return parentElement.childPointer + curPos;
+    //uint curPos = 0;
+    //for (uint i = 0; i < index; ++i)
+    //{
+    //    if (getValidMask(parentElement.masks, i) > 0 && getLeafMask(parentElement.masks, i) == 0)
+    //        ++curPos;
+    //}
+    return parentElement.childPointer + index;
 }
 
 uint getChildIndex(float3 boxPos, float3 pos)
