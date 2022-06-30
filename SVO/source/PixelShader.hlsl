@@ -22,9 +22,14 @@ cbuffer CameraInfo : register(b0)
     float3 CamPos;
     float Time;
 
-    float3 Forward;
-    float3 Right;
-    float3 Up;
+    float4 Forward;
+    float4 Right;
+    float4 Up;
+
+    uint HitIndex;
+    uint HitChildIndex;
+    uint Padding;
+    uint Padding1;
 };
 
 cbuffer SVOInfo : register(b1)
@@ -118,7 +123,7 @@ uint getChildPointer(SVOElement parentElement, uint index)
     uint curPos = 0;
     for (uint i = 0; i < index; ++i)
     {
-        if (getValidMask(parentElement.masks, i) > 0 && !getLeafMask(parentElement.masks, i) > 0)
+        if (getValidMask(parentElement.masks, i) > 0 && getLeafMask(parentElement.masks, i) == 0)
             ++curPos;
     }
     return parentElement.childPointer + curPos;
@@ -290,18 +295,20 @@ bool isInside(float3 pos, float3 posRoot, float scale)
 float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 {
     float x = position.x - 960.0;
-    x /= 960.0;
-
     float y = position.y - 540.0;
-    y /= -540.0;
 
+    float len = length(float2(x, y));
+    if (len <= 5.0 && len >= 3.0) return float4(1, 0, 0, 1);
+
+    x /= 960.0;
+    y /= -540.0;
     x *= (1280.0 / 720.0);
 
     ParentElement stack[64];
     uint stackIndex = 0;
 
     float3 cameraPos = CamPos; //float3(-1, 0.7, 0);
-    float3 dir = (x * Right) + (y * Up) + Forward;
+    float3 dir = (x * Right.xyz) + (y * Up.xyz) + Forward.xyz;
     dir = normalize(dir);
 
     float3 col = float3(0.3, 0.3, 0.3);
@@ -347,7 +354,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
         while (didNotHit)
         {
-            float2 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
+            retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
 
             childPos = cameraPos + (retChild.x * dir);
             float3 childPosMax = cameraPos + (retChild.y * dir);
@@ -362,7 +369,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     didNotHit = false;
                     break;
                 }
-                else if (!getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0)
+                else if (getLeafMask(Elements[rootIndex].masks, childHitIndex) == 0)
                 {
                     ParentElement parent;
                     parent.pos = rootPos;
@@ -443,8 +450,8 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(float3(0, 0, movingLight.x) - indexPos)), 0, 1)) * 1.5) * 1.0f;
             
             //return lerp(float4(voxColor, 1), noHitColor, saturate(retChild.x / 100.0f));
+            if (HitIndex == rootIndex && HitChildIndex == childHitIndex) return lerp(float4(voxColor, 1), float4(0, 0.7, 0.7, 1), 0.5);
             return float4(voxColor, 1);
-
         }
     }
     

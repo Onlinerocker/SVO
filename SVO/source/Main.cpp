@@ -33,6 +33,11 @@ struct AppInfo
 	glm::vec4 forward;
 	glm::vec4 right;
 	glm::vec4 up;
+
+	uint32_t hitIndex;
+	uint32_t hitChildIndex;
+	uint32_t padding;
+	uint32_t padding1;
 };
 
 struct InputData
@@ -55,7 +60,7 @@ uint8_t* createWorld(size_t res)
 	for (size_t ind = 0; ind < size; ++ind)
 	{
 		int val = std::rand() % 100;
-		if (val <= 95) buffer[ind] = 0;
+		if (val < 0) buffer[ind] = 0;
 		else buffer[ind] = 1;
 	}
 
@@ -127,7 +132,7 @@ int main()
 			continue;
 		}
 
-		svo.vec()[cur.index].childPtr = (uint32_t)svo.vec().size();
+		svo.vec()[cur.index].childPointer = (uint32_t)svo.vec().size();
 		for (int i = 0; i < 8; ++i)
 		{
 			SVO::Element item{ 123, static_cast<uint32_t>(0b11111111 << 24) | (0b00000000 << 16) };
@@ -287,7 +292,7 @@ int main()
 	};
 
 	//Setup and load app info constant buffer
-	createConstantBuffer(&constBuffers[0], &appInfo, 64);
+	createConstantBuffer(&constBuffers[0], &appInfo, sizeof(AppInfo));
 
 	//Setup and load svo constant buffer
 	//createConstantBuffer(&constBuffers[1], svo.vec().data(), 16 * ((UINT)svo.vec().size()));
@@ -359,26 +364,6 @@ int main()
 			//frameCount = 0;
 		}
 
-		if (totalSeconds >= 3.0f)
-		{
-			printf("switch\n");
-			totalSeconds = 0.0f;
-			//D3D11_MAPPED_SUBRESOURCE tempMappedStructuredBuffer;
-			//svo.vec().data()[0].masks ^= (0b11111111 << 24);
-			//devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &tempMappedStructuredBuffer);
-			//memcpy(tempMappedStructuredBuffer.pData, svo.vec().data(), sizeof(SVO::Element));
-			//devCon->Unmap(structuredBuffer, 0);
-			size_t indexToModify = 1;
-			destRegion.left = (int)(sizeof(SVO::Element) * indexToModify);
-			destRegion.right = destRegion.left + sizeof(SVO::Element);
-			destRegion.top = 0;
-			destRegion.bottom = 1;
-			destRegion.front = 0;
-			destRegion.back = 1;
-			svo.vec().data()[indexToModify].masks ^= (0b11110000 << 24);
-			devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[1], 0, 0);
-		}
-
 		startTime = std::chrono::high_resolution_clock::now();
 
         SDL_Event event;
@@ -392,6 +377,18 @@ int main()
 			if (btn >= 2)
 			{
 				SDL_SetRelativeMouseMode(SDL_TRUE);
+				if (btn == 16 && appInfo.padding > 0)
+				{
+					svo.vec().data()[appInfo.hitIndex].masks ^= ((1 << appInfo.hitChildIndex) << 24);
+					destRegion.left = (int)(sizeof(SVO::Element) * appInfo.hitIndex);
+					destRegion.right = destRegion.left + sizeof(SVO::Element);
+					destRegion.top = 0;
+					destRegion.bottom = 1;
+					destRegion.front = 0;
+					destRegion.back = 1;
+					devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[appInfo.hitIndex], 0, 0);
+					--voxelCount;
+				}
 			}
 			else
 			{
@@ -486,6 +483,11 @@ int main()
 			appInfo.pos += glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
 		}
 
+		SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward);
+		appInfo.hitIndex = res.index;
+		appInfo.hitChildIndex = res.childIndex;
+		appInfo.padding = res.didHit;
+
 		const FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		devCon->ClearRenderTargetView(backbuffer, color);
 		
@@ -504,6 +506,7 @@ int main()
 		ImGui::Text("[Flight Controls] WASD, right click + mouse");
 		ImGui::Text("%d voxels filled", voxelCount);
 		ImGui::Text("%d voxels total", voxelTotal);
+		ImGui::Text("%0.2f time running", totalSeconds);
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
 		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
