@@ -43,9 +43,9 @@ struct InputData
 	bool d{ false };
 };
 
-uint8_t* createWorld()
+uint8_t* createWorld(size_t res)
 {
-	const size_t size = 16 * 16 * 16;
+	const size_t size = res * res * res;
 	uint8_t* buffer = (uint8_t*)malloc(size);
 	unsigned int seed = (unsigned int)std::chrono::high_resolution_clock::now().time_since_epoch().count();
 	std::srand(seed);
@@ -55,7 +55,7 @@ uint8_t* createWorld()
 	for (size_t ind = 0; ind < size; ++ind)
 	{
 		int val = std::rand() % 100;
-		if (val > 100) buffer[ind] = 0;
+		if (val <= 95) buffer[ind] = 0;
 		else buffer[ind] = 1;
 	}
 
@@ -73,6 +73,7 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
+	const size_t treeDepth = 8;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
 	float flightSpeed = 100.0f;
@@ -88,7 +89,7 @@ int main()
 	float frameTime = 0.0f;
 	int mouseX = 0;
 	int mouseY = 0;
-	uint8_t* worldData = createWorld();
+	uint8_t* worldData = createWorld(1 << (treeDepth + 1));
 
 	struct Block
 	{
@@ -96,11 +97,10 @@ int main()
 		int depth;
 	};
 
-	int max = 3;
 	int blockInd = 0;
 	int voxelCount = 0;
 	int voxelTotal = 0;
-	SVO svo(max + 1);
+	SVO svo(treeDepth + 1);
 
 	std::vector<Block> createStack;
 
@@ -115,7 +115,7 @@ int main()
 		Block cur = createStack.back();
 		createStack.pop_back();
 
-		if (cur.depth >= max)
+		if (cur.depth >= treeDepth)
 		{
 			for (int i = 0; i < 8; ++i)
 			{
@@ -131,7 +131,7 @@ int main()
 		for (int i = 0; i < 8; ++i)
 		{
 			SVO::Element item{ 123, static_cast<uint32_t>(0b11111111 << 24) | (0b00000000 << 16) };
-			if (cur.depth + 1 >= max)
+			if (cur.depth + 1 >= treeDepth)
 			{
 				item.masks = 0;
 				item.masks |= static_cast<uint32_t>(0b11111111 << 16);
@@ -328,12 +328,6 @@ int main()
 	//memcpy(mappedStructuredBuffer.pData, svo.vec().data(), structBuffDesc.ByteWidth);
 	//devCon->Unmap(structuredBuffer, 0);
 	D3D11_BOX destRegion;
-	destRegion.left = 0;
-	destRegion.right = (int)svo.vec().size() / 2;
-	destRegion.top = 0;
-	destRegion.bottom = 1;
-	destRegion.front = 0;
-	destRegion.back = 1;
 	devCon->UpdateSubresource(structuredBuffer, 0, nullptr, svo.vec().data(), 0, 0);
 	devCon->PSSetShaderResources(0, 1, &structuredRscView);
 
