@@ -37,7 +37,9 @@ struct AppInfo
 	uint32_t hitIndex;
 	uint32_t hitChildIndex;
 	uint32_t padding;
-	uint32_t padding1;
+	uint32_t EditMode; //0 remove, 1 add
+
+	glm::vec4 placePos;
 };
 
 struct InputData
@@ -60,7 +62,7 @@ uint8_t* createWorld(size_t res)
 	for (size_t ind = 0; ind < size; ++ind)
 	{
 		int val = std::rand() % 100;
-		if (val < 0) buffer[ind] = 0;
+		if (val > 100) buffer[ind] = 0;
 		else buffer[ind] = 1;
 	}
 
@@ -78,7 +80,7 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
-	const size_t treeDepth = 2;
+	const size_t treeDepth = 8;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
 	float flightSpeed = 100.0f;
@@ -94,26 +96,47 @@ int main()
 	float frameTime = 0.0f;
 	int mouseX = 0;
 	int mouseY = 0;
-	uint8_t* worldData = createWorld(1 << (treeDepth + 1));
+	//uint8_t* worldData = createWorld(1 << (treeDepth + 1));
 
 	struct Block
 	{
 		size_t index;
 		int depth;
+		glm::vec3 pos;
+		float radius;
 	};
 
-	int blockInd = 0;
+	//int blockInd = 0;
 	int voxelCount = 0;
 	int voxelTotal = 0;
 	SVO svo(treeDepth + 1);
 
 	std::vector<Block> createStack;
 
-	SVO::Element root{ 1, static_cast<uint32_t>(0b11111111 << 24) | (0b00000000 << 16) };
+	SVO::Element root{ 1, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
 	svo.vec().push_back(root);
 	
-	Block begin{ 0, 0 };
+	Block begin{ 0, 0, { 0, 0, 0 }, 256.0f };
 	createStack.push_back(begin);
+
+	glm::vec3 offsets[8] =
+	{
+		{0.5,  -0.5, 0.5},
+		{-0.5, -0.5, 0.5},
+		{-0.5, -0.5, -0.5},
+		{0.5,  -0.5, -0.5},
+
+		{0.5, 0.5, 0.5},
+		{-0.5, 0.5, 0.5},
+		{-0.5, 0.5, -0.5},
+		{0.5, 0.5, -0.5},
+	};
+
+	auto isInWorld = [](glm::vec3 pos)
+	{
+		//return pos.y < (127.0f * sin(pos.x / 50.0f)) + (127.0f * cos(pos.z / 50.0f));
+		return pos.y < 0.0f;
+	};
 
 	while (createStack.size() > 0)
 	{
@@ -124,9 +147,9 @@ int main()
 		{
 			for (int i = 0; i < 8; ++i)
 			{
-				if(worldData[blockInd] > 0) ++voxelCount;
+				if(isInWorld(cur.pos)) ++voxelCount;
 				++voxelTotal;
-				uint32_t mask = worldData[blockInd++] << i;
+				uint32_t mask = (isInWorld(cur.pos)) << i;
 				svo.vec()[cur.index].masks |= (mask << 24);
 			}
 			continue;
@@ -135,14 +158,39 @@ int main()
 		svo.vec()[cur.index].childPointer = (uint32_t)svo.vec().size();
 		for (int i = 0; i < 8; ++i)
 		{
-			SVO::Element item{ 123, static_cast<uint32_t>(0b11111111 << 24) | (0b00000000 << 16) };
+			SVO::Element item{ 123, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
 			if (cur.depth + 1 >= treeDepth)
 			{
 				item.masks = 0;
 				item.masks |= static_cast<uint32_t>(0b11111111 << 16);
 			}
+
+			float childRad = cur.radius / 2.0f;
+			glm::vec3 childPos = cur.pos + (offsets[i] * cur.radius);
+			bool didFind = false;
+
+			for (float xMin = childPos.x - childRad + 0.5f; xMin <= childPos.x + childRad - 0.5f; ++xMin)
+			{
+				for (float yMin = childPos.y - childRad + 0.5f; yMin <= childPos.y + childRad - 0.5f; ++yMin)
+				{
+					for (float zMin = childPos.z - childRad; zMin <= childPos.z + childRad; ++zMin)
+					{
+						if (isInWorld(glm::vec3(xMin, yMin, zMin)))
+						{
+							didFind = true;
+							break;
+						}
+					}
+				}
+				if (didFind)
+				{
+					svo.vec()[cur.index].masks |= (1 << (24 + i));
+					break;
+				}
+			}
+
 			svo.vec().push_back(item);
-			createStack.push_back({ svo.vec().size() - 1, cur.depth + 1 });
+			createStack.push_back({ svo.vec().size() - 1, cur.depth + 1, childPos, childRad });
 		}
 	}
 
@@ -338,7 +386,7 @@ int main()
 
 	
 
-	free(worldData);
+	//free(worldData);
 
 	//DearImGui setup
 	ImGui::CreateContext();
@@ -347,6 +395,7 @@ int main()
 	ImGui_ImplSDL2_InitForD3D(window);
 	ImGui_ImplDX11_Init(dev, devCon);
 
+	bool didPressDown = false;
 	int frameCount = 0;
 	float totalSeconds = 0.0f;
 	while (true)
@@ -378,23 +427,37 @@ int main()
 			{
 				SDL_SetRelativeMouseMode(SDL_TRUE);
 				
-				SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward);
+				if (btn == 16 && !didPressDown)
+				{
+					didPressDown = true;
+				}
+
+				SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 				appInfo.hitIndex = res.index;
 				appInfo.hitChildIndex = res.childIndex;
 				appInfo.padding = res.didHit;
+				appInfo.placePos = { res.position, 1 };
 
-				if (btn == 16 && appInfo.padding > 0)
+				if (btn != 16 && didPressDown && appInfo.padding > 0)
 				{
+					didPressDown = false;
 					uint32_t stackInd = res.stackIndex;
 					uint32_t rootIndex = appInfo.hitIndex;
 					uint32_t hitChildIndex = appInfo.hitChildIndex;
-					svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+					
+					if(appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+					else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
 
-					while ((svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0)
+					while (appInfo.EditMode == 0 ? (svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0 : (svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0)
 					{
 						rootIndex = res.stack[stackInd].index;
 						hitChildIndex = res.stack[stackInd].childIndex;
-						svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+						if(appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+						else
+						{
+							if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
+							else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+						}
 
 						destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
 						destRegion.right = destRegion.left + sizeof(SVO::Element);
@@ -416,6 +479,12 @@ int main()
 					destRegion.back = 1;
 					devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[appInfo.hitIndex], 0, 0);
 					--voxelCount;
+
+					res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
+					appInfo.hitIndex = res.index;
+					appInfo.hitChildIndex = res.childIndex;
+					appInfo.padding = res.didHit;
+					appInfo.placePos = { res.position, 1 };
 				}
 			}
 			else
@@ -533,8 +602,17 @@ int main()
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
 		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
+		
+		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode))
+		{
+			SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
+			appInfo.hitIndex = res.index;
+			appInfo.hitChildIndex = res.childIndex;
+			appInfo.padding = res.didHit;
+			appInfo.placePos = { res.position, 1 };
+		}
 
-		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 1000.0f));
+		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 300.0f));
 
 		devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		ImGui::End();

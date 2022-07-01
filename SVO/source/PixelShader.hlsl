@@ -28,8 +28,10 @@ cbuffer CameraInfo : register(b0)
 
     uint HitIndex;
     uint HitChildIndex;
-    uint Padding;
-    uint Padding1;
+    uint DidHit;
+    uint EditMode;
+
+    float4 PlacementPos;
 };
 
 cbuffer SVOInfo : register(b1)
@@ -41,7 +43,7 @@ StructuredBuffer<SVOElement> Elements : register(t0);
 
 float calculateT(float plane, float origin, float direction)
 {
-    //if (plane - origin == 0 || direction == 0) return 0;
+    if (plane - origin == 0.0f && direction == 0.0f) return 999999.0;
     return (plane - origin) / direction;
 }
 
@@ -311,6 +313,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 dir = (x * Right.xyz) + (y * Up.xyz) + Forward.xyz;
     dir = normalize(dir);
 
+    float4 placementColor = float4(0, 0.5 + 0.2 * sin(Time * 7), 0, 1);
+    float2 retPlace = raytraceBox(PlacementPos.xyz, 0.5, cameraPos, dir);
+
     float3 col = float3(0.3, 0.3, 0.3);
     float tMin = 0;
 	
@@ -331,12 +336,8 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         float4 noHitColor = float4(0.2, 0.2, 0.2, 1);
         float4 escapeColor = float4(0.3, 0, 0.3, 1);
         
-        float2 lightRet = raytraceBox(movingLight, 10, cameraPos, dir);
-        
         if (retChild.x <= 0.0 && retChild.y <= 0.0)
         {
-            if (lightRet.x >= 0.0)
-                return float4(1, 1, 1, 1);
             return noHitColor;
         }
 
@@ -359,8 +360,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             childPos = cameraPos + (retChild.x * dir);
             float3 childPosMax = cameraPos + (retChild.y * dir);
 
-            if (steps > 500)
-                return float4(0, 0, 0, 1);
+            if (steps > 1000)
+                return escapeColor;
+            
 
             if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
@@ -393,6 +395,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     indexPos = childPos;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
 
+                    ++steps;
                     continue;
                 }
             }
@@ -401,8 +404,11 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 if (retChild.y >= exitMax)
                 {
-                    if (lightRet.x >= 0.0)
-                        return float4(1, 1, 1, 1);
+                    if (EditMode == 1 && retPlace.x >= 0.0 && DidHit)
+                    {
+                        return placementColor;
+                    }
+
                     return escapeColor;
                 }
                 else
@@ -432,6 +438,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             else
             {
                 childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex);
+                if (childHitIndex > 7) return float4(0, 0, 0, 1);
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
             }
@@ -440,17 +447,24 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
         if (!didNotHit)
         {
-            if (lightRet.x < retChild.x && lightRet.x >= 0.0)
-                return float4(1, 1, 1, 1);
             float3 voxNorm = getNormal(child.xyz, indexPos);
             float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
             float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(-movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(float3(0, 0, movingLight.x) - indexPos)), 0, 1)) * 1.5) * 1.0f;
-            
+
             //return lerp(float4(voxColor, 1), noHitColor, saturate(retChild.x / 100.0f));
-            if (HitIndex == rootIndex && HitChildIndex == childHitIndex) return lerp(float4(voxColor, 1), float4(0, 0.7, 0.7, 1), 0.5);
+            if (EditMode == 0 && HitIndex == rootIndex && HitChildIndex == childHitIndex)
+            {
+                float pulse = 0.2 * sin(Time * 7);
+                return lerp(float4(voxColor, 1), float4(0, 0.5 + pulse, 0.5 + pulse, 1), 0.5);
+            }
+            else if (EditMode == 1 && retPlace.x >= 0.0 && retPlace.x < retChild.x && DidHit)
+            {
+                return placementColor;
+            }
+            
             return float4(voxColor, 1);
         }
     }

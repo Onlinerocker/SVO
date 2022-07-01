@@ -57,6 +57,7 @@ public:
 		uint32_t index;
 		uint8_t childIndex{ 0 };
 		bool didHit{ false };
+		float3 position;
 
 		ParentElement stack[16];
 		uint32_t stackIndex;
@@ -88,7 +89,7 @@ public:
 	float calculateT(float plane, float origin, float direction);
 	float2 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDirection);
 	bool isInside(float3 pos, float3 posRoot, float scale);
-	HitReturn getHit(float3 cameraPos, float3 dir);
+	HitReturn getHit(float3 cameraPos, float3 dir, bool startGetEmpty = false, bool getEmpty = false);
 
 private:
 	std::vector<Element> Elements;

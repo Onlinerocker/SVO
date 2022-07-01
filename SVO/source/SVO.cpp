@@ -191,7 +191,8 @@ SVO::float4 SVO::getChildBox(float3 rootPos, float rootScale, uint index)
 float SVO::calculateT(float plane, float origin, float direction)
 {
     //if (plane - origin == 0 || direction == 0) return 0;
-    return (plane - origin) / direction;
+    if (plane - origin == 0.0f && direction == 0.0f) return INFINITY;
+    else return (plane - origin) / direction;
 }
 
 //https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
@@ -261,7 +262,7 @@ bool SVO::isInside(float3 pos, float3 posRoot, float scale)
         pos.z <= posRoot.z + scale && pos.z >= posRoot.z - scale;
 }
 
-SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir)
+SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, bool getEmpty)
 {
     ParentElement stack[16];
     uint stackIndex = 0;
@@ -302,7 +303,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir)
             if (steps > 500)
                 return { 0, 0, false };
 
-            if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
+            if (getEmpty ? true : getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
                 if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0)
                 {
@@ -370,6 +371,8 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir)
             else
             {
                 childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex);
+                if (childHitIndex > 7) return { 0, 0, false };
+
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
             }
@@ -378,7 +381,13 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir)
         }
         if (!didNotHit)
         {
-            HitReturn r = { rootIndex, (uint8_t)childHitIndex, true };
+            if (startGetEmpty)
+            {
+                float3 voxNorm = getNormal({ child.x, child.y, child.z }, indexPos);
+                return getHit({ child.x, child.y, child.z }, voxNorm, false, true);
+            }
+
+            HitReturn r = { rootIndex, (uint8_t)childHitIndex, true, { child.x, child.y, child.z } };
             r.stackIndex = stackIndex - 1;
             memcpy(r.stack, stack, 16 * sizeof(ParentElement));
             return r;
