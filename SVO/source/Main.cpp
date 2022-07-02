@@ -80,6 +80,7 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
+	const bool readFile = true;
 	const size_t treeDepth = 8;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
@@ -112,9 +113,6 @@ int main()
 	SVO svo(treeDepth + 1);
 
 	std::vector<Block> createStack;
-
-	SVO::Element root{ 1, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
-	svo.vec().push_back(root);
 	
 	Block begin{ 0, 0, { 0, 0, 0 }, 256.0f };
 	createStack.push_back(begin);
@@ -134,64 +132,86 @@ int main()
 
 	auto isInWorld = [](glm::vec3 pos)
 	{
-		//return pos.y < (127.0f * sin(pos.x / 50.0f)) + (127.0f * cos(pos.z / 50.0f));
-		return pos.y < 0.0f;
+		return pos.y < (127.0f * sin(pos.x / 50.0f)) + (127.0f * cos(pos.z / 50.0f));
+		//return pos.y < 0.0f;
 	};
 
-	while (createStack.size() > 0)
+	if (readFile)
 	{
-		Block cur = createStack.back();
-		createStack.pop_back();
-
-		if (cur.depth >= treeDepth)
+		FILE* f = fopen("hills.bin", "rb");
+		size_t svoSize = 0;
+		
+		fread(&svoSize, sizeof(size_t), 1, f);
+		svo.vec().reserve(svoSize);
+		svo.vec().resize(svoSize);
+		fread(svo.vec().data(), sizeof(SVO::Element), svoSize, f);
+		fclose(f);
+	}
+	else
+	{
+		SVO::Element root{ 1, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
+		svo.vec().push_back(root);
+		while (createStack.size() > 0)
 		{
+			Block cur = createStack.back();
+			createStack.pop_back();
+
+			if (cur.depth >= treeDepth)
+			{
+				for (int i = 0; i < 8; ++i)
+				{
+					if (isInWorld(cur.pos)) ++voxelCount;
+					++voxelTotal;
+					uint32_t mask = (isInWorld(cur.pos)) << i;
+					svo.vec()[cur.index].masks |= (mask << 24);
+				}
+				continue;
+			}
+
+			svo.vec()[cur.index].childPointer = (uint32_t)svo.vec().size();
 			for (int i = 0; i < 8; ++i)
 			{
-				if(isInWorld(cur.pos)) ++voxelCount;
-				++voxelTotal;
-				uint32_t mask = (isInWorld(cur.pos)) << i;
-				svo.vec()[cur.index].masks |= (mask << 24);
-			}
-			continue;
-		}
-
-		svo.vec()[cur.index].childPointer = (uint32_t)svo.vec().size();
-		for (int i = 0; i < 8; ++i)
-		{
-			SVO::Element item{ 123, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
-			if (cur.depth + 1 >= treeDepth)
-			{
-				item.masks = 0;
-				item.masks |= static_cast<uint32_t>(0b11111111 << 16);
-			}
-
-			float childRad = cur.radius / 2.0f;
-			glm::vec3 childPos = cur.pos + (offsets[i] * cur.radius);
-			bool didFind = false;
-
-			for (float xMin = childPos.x - childRad + 0.5f; xMin <= childPos.x + childRad - 0.5f; ++xMin)
-			{
-				for (float yMin = childPos.y - childRad + 0.5f; yMin <= childPos.y + childRad - 0.5f; ++yMin)
+				SVO::Element item{ 123, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
+				if (cur.depth + 1 >= treeDepth)
 				{
-					for (float zMin = childPos.z - childRad; zMin <= childPos.z + childRad; ++zMin)
+					item.masks = 0;
+					item.masks |= static_cast<uint32_t>(0b11111111 << 16);
+				}
+
+				float childRad = cur.radius / 2.0f;
+				glm::vec3 childPos = cur.pos + (offsets[i] * cur.radius);
+				bool didFind = false;
+
+				for (float xMin = childPos.x - childRad + 0.5f; xMin <= childPos.x + childRad - 0.5f; ++xMin)
+				{
+					for (float yMin = childPos.y - childRad + 0.5f; yMin <= childPos.y + childRad - 0.5f; ++yMin)
 					{
-						if (isInWorld(glm::vec3(xMin, yMin, zMin)))
+						for (float zMin = childPos.z - childRad; zMin <= childPos.z + childRad; ++zMin)
 						{
-							didFind = true;
-							break;
+							if (isInWorld(glm::vec3(xMin, yMin, zMin)))
+							{
+								didFind = true;
+								break;
+							}
 						}
 					}
+					if (didFind)
+					{
+						svo.vec()[cur.index].masks |= (1 << (24 + i));
+						break;
+					}
 				}
-				if (didFind)
-				{
-					svo.vec()[cur.index].masks |= (1 << (24 + i));
-					break;
-				}
-			}
 
-			svo.vec().push_back(item);
-			createStack.push_back({ svo.vec().size() - 1, cur.depth + 1, childPos, childRad });
+				svo.vec().push_back(item);
+				createStack.push_back({ svo.vec().size() - 1, cur.depth + 1, childPos, childRad });
+			}
 		}
+
+		FILE* f = fopen("hills.bin", "wb");
+		size_t size = svo.vec().size();
+		fwrite(&size, sizeof(size_t), 1, f);
+		fwrite(svo.vec().data(), sizeof(SVO::Element), svo.vec().size(), f);
+		fclose(f);
 	}
 
 	//SDL Setup
