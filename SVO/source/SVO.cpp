@@ -10,6 +10,11 @@ std::vector<SVO::Element>& SVO::vec()
 	return Elements;
 }
 
+float& SVO::rootRadius()
+{
+    return mRootRadius;
+}
+
 SVO::uint SVO::getValidMask(uint mask, uint index)
 {
     uint x = 1 << (24 + index);
@@ -33,8 +38,12 @@ SVO::uint SVO::getChildPointer(Element parentElement, uint index)
     return parentElement.childPointer + index;
 }
 
-SVO::uint SVO::getChildIndex(float3 boxPos, float3 pos)
+SVO::uint SVO::getChildIndex(float3 boxPos, float3 pos, float3 dir)
 {
+    if (boxPos.x == pos.x) pos.x += 0.1f * dir.x;
+    if (boxPos.y == pos.y) pos.y += 0.1f * dir.y;
+    if (boxPos.z == pos.z) pos.z += 0.1f * dir.z;
+
     if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
         return 0;
     if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
@@ -56,17 +65,17 @@ SVO::uint SVO::getChildIndex(float3 boxPos, float3 pos)
     return 9;
 }
 
-SVO::float3 SVO::getNormal(float3 boxPos, float3 pos)
+SVO::float3 SVO::getNormal(float3 boxPos, float3 pos, float3 dir)
 {
     float3 v = pos - boxPos;
     float3 vAbs = abs(v);
 
-    if (vAbs.x >= vAbs.y && vAbs.x >= vAbs.z)
+    if (vAbs.x >= vAbs.y && vAbs.x >= vAbs.z && dir.x != 0.0f)
     {
         return glm::sign(v.x) * float3(1, 0, 0);
     }
 
-    if (vAbs.y > vAbs.x && vAbs.y >= vAbs.z)
+    if (vAbs.y > vAbs.x && vAbs.y >= vAbs.z && dir.y != 0.0f)
     {
         return glm::sign(v.y) * float3(0, 1, 0);
     }
@@ -74,10 +83,10 @@ SVO::float3 SVO::getNormal(float3 boxPos, float3 pos)
     return glm::sign(v.z) * float3(0, 0, 1);
 }
 
-SVO::uint SVO::getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex)
+SVO::uint SVO::getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex, float3 dir)
 {
     float4 prev = getChildBox(boxPos, rootScale, prevIndex);
-    float3 norm = getNormal({prev.x, prev.y, prev.z}, pos);
+    float3 norm = getNormal({prev.x, prev.y, prev.z}, pos, dir);
 
     if (prevIndex == 0)
     {
@@ -268,7 +277,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
     uint stackIndex = 0;
 
     float3 rootPos = float3(0, 0, 0);
-    float rootScale = 256.0;
+    float rootScale = mRootRadius;
 
     {
         float4 child = float4(rootPos, rootScale);
@@ -283,7 +292,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
 
         float3 childPos = cameraPos + (retChild.x * dir);
 
-        uint childHitIndex = getChildIndex(rootPos, childPos);
+        uint childHitIndex = getChildIndex(rootPos, childPos, dir);
         if (childHitIndex > 7)
             return { 0, 0, false };
         float3 indexPos = childPos;
@@ -303,7 +312,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
             if (steps > 500)
                 return { 0, 0, false };
 
-            if (getEmpty ? true : getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
+            if ((getEmpty ? true : getValidMask(Elements[rootIndex].masks, childHitIndex)) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
                 if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0)
                 {
@@ -327,7 +336,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
                     rootIndex = getChildPointer(Elements[rootIndex], childHitIndex);
 
                     float3 downChild = cameraPos + (retChild.x * dir);
-                    childHitIndex = getChildIndex(rootPos, downChild);
+                    childHitIndex = getChildIndex(rootPos, downChild, dir);
                     if (childHitIndex > 7)
                         return { 0, 0, false };
 
@@ -352,7 +361,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
                     rootExit = stack[stackIndex].exit;
                     rootIndex = stack[stackIndex].index;
 
-                    childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
+                    childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir);
                     while (childHitIndex > 7 && stackIndex >= 1)
                     {
                         --stackIndex;
@@ -361,7 +370,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
                         rootExit = stack[stackIndex].exit;
                         rootIndex = stack[stackIndex].index;
 
-                        childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
+                        childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir);
                     }
 
                     indexPos = childPosMax;
@@ -370,7 +379,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
             }
             else
             {
-                childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex);
+                childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex, dir);
                 if (childHitIndex > 7) return { 0, 0, false };
 
                 indexPos = childPosMax;
@@ -383,7 +392,7 @@ SVO::HitReturn SVO::getHit(float3 cameraPos, float3 dir, bool startGetEmpty, boo
         {
             if (startGetEmpty)
             {
-                float3 voxNorm = getNormal({ child.x, child.y, child.z }, indexPos);
+                float3 voxNorm = getNormal({ child.x, child.y, child.z }, indexPos, dir);
                 return getHit({ child.x, child.y, child.z }, voxNorm, false, true);
             }
 

@@ -17,6 +17,8 @@
 #include "SDL2/SDL.h"
 #undef main
 
+#include "renderdoc_app.h"
+
 #include "SVO.h"
 #include "Camera.h"
 
@@ -39,7 +41,8 @@ struct AppInfo
 	uint32_t padding;
 	uint32_t EditMode; //0 remove, 1 add
 
-	glm::vec4 placePos;
+	glm::vec3 placePos;
+	float rootRadius;
 };
 
 struct InputData
@@ -48,6 +51,7 @@ struct InputData
 	bool a{ false };
 	bool s{ false };
 	bool d{ false };
+	bool rightMouse{ false };
 };
 
 uint8_t* createWorld(size_t res)
@@ -80,11 +84,12 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
-	const bool readFile = true;
+	const bool readFile = false;
 	const size_t treeDepth = 8;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
 	float flightSpeed = 100.0f;
+	char mapFileName[100] = {'f', 'i', 'l', 'e', '\0'};
 
 	Camera camera;
 	InputData input;
@@ -99,12 +104,20 @@ int main()
 	int mouseY = 0;
 	//uint8_t* worldData = createWorld(1 << (treeDepth + 1));
 
+	struct ParentBlock
+	{
+		size_t index;
+		uint8_t childIndex;
+	};
+
 	struct Block
 	{
 		size_t index;
 		int depth;
 		glm::vec3 pos;
 		float radius;
+
+		ParentBlock stack[16];
 	};
 
 	//int blockInd = 0;
@@ -113,9 +126,6 @@ int main()
 	SVO svo(treeDepth + 1);
 
 	std::vector<Block> createStack;
-	
-	Block begin{ 0, 0, { 0, 0, 0 }, 256.0f };
-	createStack.push_back(begin);
 
 	glm::vec3 offsets[8] =
 	{
@@ -138,19 +148,32 @@ int main()
 
 	if (readFile)
 	{
-		FILE* f = fopen("hills.bin", "rb");
+		FILE* f = fopen("hills_big.bin", "rb");
 		size_t svoSize = 0;
 		
+		fread(&appInfo.rootRadius, sizeof(float), 1, f);
 		fread(&svoSize, sizeof(size_t), 1, f);
+
+		svo.rootRadius() = appInfo.rootRadius;
 		svo.vec().reserve(svoSize);
 		svo.vec().resize(svoSize);
+
 		fread(svo.vec().data(), sizeof(SVO::Element), svoSize, f);
 		fclose(f);
 	}
 	else
 	{
+		auto start = (std::chrono::high_resolution_clock::now());
+
+		appInfo.rootRadius = 256.0f;// 1 << treeDepth;
+		svo.rootRadius() = appInfo.rootRadius;
+
+		Block begin{ 0, 0, { 0, 0, 0 }, appInfo.rootRadius };
+		createStack.push_back(begin);
 		SVO::Element root{ 1, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
+		svo.vec().reserve(19173961*8);
 		svo.vec().push_back(root);
+
 		while (createStack.size() > 0)
 		{
 			Block cur = createStack.back();
@@ -160,10 +183,21 @@ int main()
 			{
 				for (int i = 0; i < 8; ++i)
 				{
-					if (isInWorld(cur.pos)) ++voxelCount;
+					bool isIn = isInWorld(cur.pos);
+					if (isIn)
+					{
+						++voxelCount;
+						svo.vec()[cur.index].masks |= (1 << (24 + i));
+
+						for (int d = cur.depth - 1; d >= 0; --d)
+						{
+							ParentBlock& p = cur.stack[d];
+							if ((svo.vec()[p.index].masks & (1 << (24 + p.childIndex))) > 0) break;
+							svo.vec()[p.index].masks |= (1 << (24 + p.childIndex));
+						}
+					}
+
 					++voxelTotal;
-					uint32_t mask = (isInWorld(cur.pos)) << i;
-					svo.vec()[cur.index].masks |= (mask << 24);
 				}
 				continue;
 			}
@@ -180,38 +214,40 @@ int main()
 
 				float childRad = cur.radius / 2.0f;
 				glm::vec3 childPos = cur.pos + (offsets[i] * cur.radius);
-				bool didFind = false;
-
-				for (float xMin = childPos.x - childRad + 0.5f; xMin <= childPos.x + childRad - 0.5f; ++xMin)
-				{
-					for (float yMin = childPos.y - childRad + 0.5f; yMin <= childPos.y + childRad - 0.5f; ++yMin)
-					{
-						for (float zMin = childPos.z - childRad; zMin <= childPos.z + childRad; ++zMin)
-						{
-							if (isInWorld(glm::vec3(xMin, yMin, zMin)))
-							{
-								didFind = true;
-								break;
-							}
-						}
-					}
-					if (didFind)
-					{
-						svo.vec()[cur.index].masks |= (1 << (24 + i));
-						break;
-					}
-				}
+				
+				//bool didFind = false;
+				//for (float xMin = childPos.x - childRad + 0.5f; xMin <= childPos.x + childRad - 0.5f; ++xMin)
+				//{
+				//	for (float yMin = childPos.y - childRad + 0.5f; yMin <= childPos.y + childRad - 0.5f; ++yMin)
+				//	{
+				//		for (float zMin = childPos.z - childRad + 0.5f; zMin <= childPos.z + childRad - 0.5f; ++zMin)
+				//		{
+				//			if (isInWorld(glm::vec3(xMin, yMin, zMin)))
+				//			{
+				//				didFind = true;
+				//				break;
+				//			}
+				//		}
+				//	}
+				//	if (didFind)
+				//	{
+				//		svo.vec()[cur.index].masks |= (1 << (24 + i));
+				//		break;
+				//	}
+				//}
 
 				svo.vec().push_back(item);
-				createStack.push_back({ svo.vec().size() - 1, cur.depth + 1, childPos, childRad });
+
+				Block childBlock = { svo.vec().size() - 1, cur.depth + 1, childPos, childRad };
+				memcpy(childBlock.stack, cur.stack, sizeof(ParentBlock)* cur.depth);
+				childBlock.stack[cur.depth] = { cur.index, (uint8_t)i };
+				createStack.push_back(childBlock);
 			}
 		}
 
-		FILE* f = fopen("hills.bin", "wb");
-		size_t size = svo.vec().size();
-		fwrite(&size, sizeof(size_t), 1, f);
-		fwrite(svo.vec().data(), sizeof(SVO::Element), svo.vec().size(), f);
-		fclose(f);
+		auto end = (std::chrono::high_resolution_clock::now());
+		auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		printf("gen time %lld\n", time.count());
 	}
 
 	//SDL Setup
@@ -296,7 +332,7 @@ int main()
 	ID3D10Blob* psError;
 
 	auto resv = D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "vertexMain", "vs_4_0", 0, 0, &vs, &vsError);
-	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", 0, 0, &ps, &psError);
+	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", D3DCOMPILE_DEBUG, 0, &ps, &psError);
 
 	if (vsError != nullptr) printf("\nVERTEX SHADER ERRORS:\n%s\n", (const char*)vsError->GetBufferPointer());
 	if (psError != nullptr) printf("\nPIXEL SHADER ERRORS:\n%s\n", (const char*)psError->GetBufferPointer());
@@ -401,7 +437,11 @@ int main()
 	//memcpy(mappedStructuredBuffer.pData, svo.vec().data(), structBuffDesc.ByteWidth);
 	//devCon->Unmap(structuredBuffer, 0);
 	D3D11_BOX destRegion;
+	auto start = std::chrono::high_resolution_clock::now();
 	devCon->UpdateSubresource(structuredBuffer, 0, nullptr, svo.vec().data(), 0, 0);
+	auto end = (std::chrono::high_resolution_clock::now());
+	auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	printf("%lld upload time\n", time.count());
 	devCon->PSSetShaderResources(0, 1, &structuredRscView);
 
 	
@@ -442,11 +482,12 @@ int main()
 			ImGui_ImplSDL2_ProcessEvent(&event);
 			uint32_t mouseBtn = SDL_GetMouseState(&mouseX, &mouseY);
 			int btn = SDL_BUTTON(mouseBtn);
+			input.rightMouse = (btn >= 2);
 
-			if (btn >= 2)
+			if (input.rightMouse)
 			{
 				SDL_SetRelativeMouseMode(SDL_TRUE);
-				
+
 				if (btn == 16 && !didPressDown)
 				{
 					didPressDown = true;
@@ -456,7 +497,7 @@ int main()
 				appInfo.hitIndex = res.index;
 				appInfo.hitChildIndex = res.childIndex;
 				appInfo.padding = res.didHit;
-				appInfo.placePos = { res.position, 1 };
+				appInfo.placePos = res.position;
 
 				if (btn != 16 && didPressDown && appInfo.padding > 0)
 				{
@@ -504,7 +545,7 @@ int main()
 					appInfo.hitIndex = res.index;
 					appInfo.hitChildIndex = res.childIndex;
 					appInfo.padding = res.didHit;
-					appInfo.placePos = { res.position, 1 };
+					appInfo.placePos = res.position;
 				}
 			}
 			else
@@ -582,23 +623,27 @@ int main()
             }
         }
 
-		if (input.w)
+		if (input.rightMouse)
 		{
-			appInfo.pos += glm::vec3(appInfo.forward) * deltaTimeSec * flightSpeed;
-		}
-		else if (input.s)
-		{
-			appInfo.pos -= glm::vec3(appInfo.forward) * deltaTimeSec * flightSpeed;
+			if (input.w)
+			{
+				appInfo.pos += glm::vec3(appInfo.forward) * deltaTimeSec * flightSpeed;
+			}
+			else if (input.s)
+			{
+				appInfo.pos -= glm::vec3(appInfo.forward) * deltaTimeSec * flightSpeed;
+			}
+
+			if (input.a)
+			{
+				appInfo.pos -= glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
+			}
+			else if (input.d)
+			{
+				appInfo.pos += glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
+			}
 		}
 
-		if (input.a)
-		{
-			appInfo.pos -= glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
-		}
-		else if (input.d)
-		{
-			appInfo.pos += glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
-		}
 
 		const FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		devCon->ClearRenderTargetView(backbuffer, color);
@@ -622,23 +667,57 @@ int main()
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
 		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
-		
+		ImGui::End();
+
+		ImGui::Begin("Controls");
 		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode))
 		{
 			SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 			appInfo.hitIndex = res.index;
 			appInfo.hitChildIndex = res.childIndex;
 			appInfo.padding = res.didHit;
-			appInfo.placePos = { res.position, 1 };
+			appInfo.placePos = res.position;
 		}
 
 		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 300.0f));
-
-		devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		ImGui::End();
-		
+
+		ImGui::Begin("File");
+		ImGui::InputText("File Name", mapFileName, 100);
+		if (ImGui::Button("Save Map"))
+		{
+			ImGui::OpenPopup("SaveConfirm");
+		}
+
+		if (ImGui::BeginPopup("SaveConfirm"))
+		{
+			ImGui::Text("Are you sure you want to save?");
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			if (ImGui::Button("Confirm"))
+			{
+				FILE* f = fopen(mapFileName, "wb");
+				size_t size = svo.vec().size();
+				fwrite(&appInfo.rootRadius, sizeof(float), 1, f);
+				fwrite(&size, sizeof(size_t), 1, f);
+				fwrite(svo.vec().data(), sizeof(SVO::Element), svo.vec().size(), f);
+				fclose(f);
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+
+		if (ImGui::Button("Load Map"))
+		{
+
+		}
+		ImGui::End();
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+		devCon->UpdateSubresource(constBuffers[0], 0, nullptr, &appInfo, 0, 0);
 		swapChain->Present(0, 0);
 	}
 

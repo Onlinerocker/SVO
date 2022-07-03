@@ -78,13 +78,14 @@ public:
 	SVO(size_t size);
 
 	std::vector<Element>& vec();
+	float& rootRadius();
 
 	uint getValidMask(uint mask, uint index);
 	uint getLeafMask(uint mask, uint index);
 	uint getChildPointer(Element parentElement, uint index);
-	uint getChildIndex(float3 boxPos, float3 pos);
-	float3 getNormal(float3 boxPos, float3 pos);
-	uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex);
+	uint getChildIndex(float3 boxPos, float3 pos, float3 dir);
+	float3 getNormal(float3 boxPos, float3 pos, float3 dir);
+	uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex, float3 dir);
 	float4 getChildBox(float3 rootPos, float rootScale, uint index);
 	float calculateT(float plane, float origin, float direction);
 	float2 raytraceBox(float3 boxPos, float boxRad, float3 cameraPos, float3 rayDirection);
@@ -93,6 +94,7 @@ public:
 
 private:
 	std::vector<Element> Elements;
+	float mRootRadius{ 256.0f };
 
 };
 

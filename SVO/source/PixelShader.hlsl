@@ -31,7 +31,8 @@ cbuffer CameraInfo : register(b0)
     uint DidHit;
     uint EditMode;
 
-    float4 PlacementPos;
+    float3 PlacementPos;
+    float RootRadius;
 };
 
 cbuffer SVOInfo : register(b1)
@@ -131,27 +132,127 @@ uint getChildPointer(SVOElement parentElement, uint index)
     return parentElement.childPointer + index;
 }
 
-uint getChildIndex(float3 boxPos, float3 pos)
+float sdBox(float3 p, float3 b)
 {
+    float3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+uint getChildIndex(float3 boxPos, float3 pos, float scale, float3 camPos)
+{
+    //if (boxPos.x == pos.x) pos.x += 0.1f * dir.x;
+    //if (boxPos.y == pos.y) pos.y += 0.1f * dir.y;
+    //if (boxPos.z == pos.z) pos.z += 0.1f * dir.z;
+
+
+    float3 offsets[8] =
+    {
+        {0.5,  -0.5, 0.5},
+        {-0.5, -0.5, 0.5},
+        {-0.5, -0.5, -0.5},
+        {0.5,  -0.5, -0.5},
+
+        {0.5, 0.5, 0.5},
+        {-0.5, 0.5, 0.5},
+        {-0.5, 0.5, -0.5},
+        {0.5, 0.5, -0.5},
+    };
+
+    uint val = 9;
+    bool first = true;
+    float minDist = 1.0f;
+
+    //if (sdBox(pos - boxPos, float3(scale, scale, scale)) > 0.0) return 9;
+
     if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
-        return 0;
+    {
+        float d = length((boxPos + (offsets[0] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 0;
+            first = false;
+        }
+    }
+
     if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
-        return 1;
+    {
+        float d = length((boxPos + (offsets[1] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 1;
+            first = false;
+        }
+    }
+
     if (pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z)
-        return 2;
+    {
+        float d = length((boxPos + (offsets[2] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 2;
+            first = false;
+        }
+    }
+
     if (pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z)
-        return 3;
+    {
+        float d = length((boxPos + (offsets[3] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 3;
+            first = false;
+        }
+    }
 
     if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
-        return 4;
-    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
-        return 5;
-    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
-        return 6;
-    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
-        return 7;
+    {
+        float d = length((boxPos + (offsets[4] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 4;
+            first = false;
+        }
+    }
 
-    return 9;
+    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
+    {
+        float d = length((boxPos + (offsets[5] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 5;
+            first = false;
+        }
+    }
+
+    if (pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
+    {
+        float d = length((boxPos + (offsets[6] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 6;
+            first = false;
+        }
+    }
+
+    if (pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
+    {
+        float d = length((boxPos + (offsets[7] * scale)) - camPos);
+        if (d < minDist || first)
+        {
+            minDist = d;
+            val = 7;
+            first = false;
+        }
+    }
+
+    return val;
 }
 
 float4 getChildBox(float3 rootPos, float rootScale, uint index)
@@ -179,29 +280,160 @@ float4 getChildBox(float3 rootPos, float rootScale, uint index)
     return float4(0, 0, 0, 0);
 }
 
-float3 getNormal(float3 boxPos, float3 pos)
+float3 getNormal(float3 boxPos, float3 pos, float3 dir)
 {
     float3 v = pos - boxPos;
     float3 vAbs = abs(v);
-    
-    if (vAbs.x >= vAbs.y && vAbs.x >= vAbs.z)
+
+    //if (vAbs.x == vAbs.y && vAbs.x != vAbs.z)
+    //{
+    //    return sign(v.x) * float3(1, 0, 0) + sign(v.y) * float3(0, 1, 0);
+    //}
+
+    float3 norm = float3(0, 0, 0);
+
+    if (vAbs.x >= vAbs.y && vAbs.x >= vAbs.z && dir.x != 0.0)
     {
-        return sign(v.x) * float3(1, 0, 0);
+        norm += sign(v.x) * float3(1, 0, 0);
     }
 
-    if (vAbs.y > vAbs.x && vAbs.y >= vAbs.z)
+    if (vAbs.y >= vAbs.x && vAbs.y >= vAbs.z && dir.y != 0.0)
     {
-        return sign(v.y) * float3(0, 1, 0);
+        norm += sign(v.y) * float3(0, 1, 0);
     }
 
-    return sign(v.z) * float3(0, 0, 1);
+    if (vAbs.z >= vAbs.x && vAbs.z >= vAbs.y && dir.z != 0.0)
+    {
+        norm += sign(v.z) * float3(0, 0, 1);
+    }
+
+    return norm;
 }
 
-uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex)
+uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex, float3 dir)
 {
+    //float3 offsets[8] =
+    //{
+    //    {0.5,  -0.5, 0.5},
+    //    {-0.5, -0.5, 0.5},
+    //    {-0.5, -0.5, -0.5},
+    //    {0.5,  -0.5, -0.5},
+    //
+    //    {0.5, 0.5, 0.5},
+    //    {-0.5, 0.5, 0.5},
+    //    {-0.5, 0.5, -0.5},
+    //    {0.5, 0.5, -0.5},
+    //};
+    //
+    //uint val = 9;
+    //bool first = true;
+    //float minDist = 1.0f;
+    //float scale = rootScale;
+    //float camPos = CamPos;
+    //float thresh = length((boxPos + (offsets[prevIndex] * scale)) - camPos);
+    //
+    //if ((prevIndex == 1 || prevIndex == 3 || prevIndex == 4) && prevIndex != 0 && pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[0] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 0;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 0 || prevIndex == 2 || prevIndex == 5) && prevIndex != 1 && pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z >= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[1] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 1;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 1 || prevIndex == 3 || prevIndex == 6) && prevIndex != 2 && pos.x <= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[2] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 2;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 2 || prevIndex == 0 || prevIndex == 7) && prevIndex != 3 && pos.x >= boxPos.x && pos.y <= boxPos.y && pos.z <= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[3] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 3;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 0 || prevIndex == 5 || prevIndex == 7) && prevIndex != 4 && pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[4] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 4;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 1 || prevIndex == 4 || prevIndex == 6) && prevIndex != 5 && pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z >= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[5] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 5;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 5 || prevIndex == 2 || prevIndex == 7) && prevIndex != 6 && pos.x <= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[6] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 6;
+    //        first = false;
+    //    }
+    //}
+    //
+    //if ((prevIndex == 6 || prevIndex == 4 || prevIndex == 3) && prevIndex != 7 && pos.x >= boxPos.x && pos.y >= boxPos.y && pos.z <= boxPos.z)
+    //{
+    //    float d = length((boxPos + (offsets[7] * scale)) - camPos);
+    //    if ((d < minDist && d > thresh) || first)
+    //    {
+    //        minDist = d;
+    //        val = 7;
+    //        first = false;
+    //    }
+    //}
+    //
+    //return val;
+
+    //uint id = getChildIndex(boxPos, pos + dir * 0.01, rootScale, CamPos);
+    //
+    //if (id == prevIndex) return 9;
+    //
+    //return id;
+
     float4 prev = getChildBox(boxPos, rootScale, prevIndex);
-    float3 norm = getNormal(prev.xyz, pos);
-    
+    float3 norm = getNormal(prev.xyz, pos, dir);
+
+    //if (prevIndex > 7) return 10;
+    //if (prev.x == 0) return 10;
+
     if (prevIndex == 0)
     {
         if (norm.x < 0.0)
@@ -323,7 +555,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 movingLight = float3(512.0 /*200*sin(Time)*/, 300, -0);
 
     float3 rootPos = float3(0, 0, 0);
-    float rootScale = 256.0;
+    float rootScale = RootRadius;
 
     {
         float4 child = float4(rootPos, rootScale);
@@ -343,9 +575,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
         float3 childPos = cameraPos + (retChild.x * dir);
 
-        uint childHitIndex = getChildIndex(rootPos, childPos);
-        if (childHitIndex > 7)
-            return float4(0, 1, 1, 1);
+        uint childHitIndex = getChildIndex(rootPos, childPos, rootScale, cameraPos);
+        //if (childHitIndex > 7)
+        //    return float4(0, 0, 1, 1);
         float3 indexPos = childPos;
         child = getChildBox(rootPos, rootScale, childHitIndex);
 
@@ -361,7 +593,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             float3 childPosMax = cameraPos + (retChild.y * dir);
 
             if (steps > 1000)
-                return escapeColor;
+                return float4(0, 0, 0, 1);
             
 
             if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
@@ -388,9 +620,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootIndex = getChildPointer(Elements[rootIndex], childHitIndex);
 
                     float3 downChild = cameraPos + (retChild.x * dir);
-                    childHitIndex = getChildIndex(rootPos, downChild);
-                    if (childHitIndex > 7)
-                        return float4(1, 1, 1, 1);
+                    childHitIndex = getChildIndex(rootPos, downChild, rootScale, cameraPos);
+                    //if (childHitIndex > 7)
+                    //    return float4(1, 1, 1, 1);
 
                     indexPos = childPos;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
@@ -419,7 +651,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootExit = stack[stackIndex].exit;
                     rootIndex = stack[stackIndex].index;
 
-                    childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
+                    childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir);
                     while (childHitIndex > 7 && stackIndex >= 1)
                     {
                         --stackIndex;
@@ -428,7 +660,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                         rootExit = stack[stackIndex].exit;
                         rootIndex = stack[stackIndex].index;
 
-                        childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex);
+                        childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir);
                     }
                         
                     indexPos = childPosMax;
@@ -437,8 +669,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             }
             else
             {
-                childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex);
-                if (childHitIndex > 7) return float4(0, 0, 0, 1);
+                childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex, dir);
+                if (childHitIndex > 7) return float4(0, 1, 0, 1);
+                //else return float4(0, 0, 1, 1);
+                //else if (childHitIndex > 7) return float4(0, 0, 0, 1);
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
             }
@@ -447,7 +681,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
         if (!didNotHit)
         {
-            float3 voxNorm = getNormal(child.xyz, indexPos);
+            float3 voxNorm = getNormal(child.xyz, indexPos, float3(1,1,1));
             float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
             float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;

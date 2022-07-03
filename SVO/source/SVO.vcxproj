@@ -173,6 +173,7 @@
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ImGuiBackend\imgui_impl_dx11.h" />
     <ClInclude Include="ImGuiBackend\imgui_impl_sdl.h" />
+    <ClInclude Include="renderdoc_app.h" />
     <ClInclude Include="SVO.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
