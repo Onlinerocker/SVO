@@ -84,7 +84,7 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
-	const bool readFile = false;
+	const bool readFile = true;
 	const size_t treeDepth = 8;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
@@ -332,7 +332,7 @@ int main()
 	ID3D10Blob* psError;
 
 	auto resv = D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "vertexMain", "vs_4_0", 0, 0, &vs, &vsError);
-	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", D3DCOMPILE_DEBUG, 0, &ps, &psError);
+	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &ps, &psError);
 
 	if (vsError != nullptr) printf("\nVERTEX SHADER ERRORS:\n%s\n", (const char*)vsError->GetBufferPointer());
 	if (psError != nullptr) printf("\nPIXEL SHADER ERRORS:\n%s\n", (const char*)psError->GetBufferPointer());

@@ -138,13 +138,8 @@ float sdBox(float3 p, float3 b)
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-uint getChildIndex(float3 boxPos, float3 pos, float scale, float3 camPos)
+uint getChildIndex(float3 boxPos, float3 pos, float scale, float3 camPos, float3 dir)
 {
-    //if (boxPos.x == pos.x) pos.x += 0.1f * dir.x;
-    //if (boxPos.y == pos.y) pos.y += 0.1f * dir.y;
-    //if (boxPos.z == pos.z) pos.z += 0.1f * dir.z;
-
-
     float3 offsets[8] =
     {
         {0.5,  -0.5, 0.5},
@@ -291,20 +286,43 @@ float3 getNormal(float3 boxPos, float3 pos, float3 dir)
     //}
 
     float3 norm = float3(0, 0, 0);
+    float dMax = -1.0f;
+
 
     if (vAbs.x >= vAbs.y && vAbs.x >= vAbs.z && dir.x != 0.0)
     {
-        norm += sign(v.x) * float3(1, 0, 0);
+        float3 normX = sign(v.x) * float3(1, 0, 0);
+        norm += normX;
+        //float d = dot(normX, dir);
+        //if (d > dMax)
+        //{
+        //    dMax = d;
+        //    norm = normX;
+        //}
     }
 
     if (vAbs.y >= vAbs.x && vAbs.y >= vAbs.z && dir.y != 0.0)
     {
-        norm += sign(v.y) * float3(0, 1, 0);
+        float3 normY = sign(v.y) * float3(0, 1, 0);
+        norm += normY;
+        //float d = dot(normY, dir);
+        //if (d > dMax)
+        //{
+        //    dMax = d;
+        //    norm = normY;
+        //}
     }
 
     if (vAbs.z >= vAbs.x && vAbs.z >= vAbs.y && dir.z != 0.0)
     {
-        norm += sign(v.z) * float3(0, 0, 1);
+        float3 normZ = sign(v.z) * float3(0, 0, 1);
+        norm += normZ;
+        //float d = dot(normZ, dir);
+        //if (d > dMax)
+        //{
+        //    dMax = d;
+        //    norm = normZ;
+        //}
     }
 
     return norm;
@@ -434,84 +452,86 @@ uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevInde
     //if (prevIndex > 7) return 10;
     //if (prev.x == 0) return 10;
 
+    //if you hit a corner or edge... enter on the side closest to you... exit on the side farther from you...
+
     if (prevIndex == 0)
     {
-        if (norm.x < 0.0)
+        if (norm.x < 0.0 && dir.x < 0.0)
             return 1;
-        if (norm.y > 0.0)
+        if (norm.y > 0.0 && dir.y > 0.0)
             return 4;
-        if (norm.z < 0.0)
+        if (norm.z < 0.0 && dir.z < 0.0)
             return 3;
     }
     
     if (prevIndex == 1)
     {
-        if (norm.x > 0.0)
+        if (norm.x > 0.0 && dir.x > 0.0)
             return 0;
-        if (norm.y > 0.0)
+        if (norm.y > 0.0 && dir.y > 0.0)
             return 5;
-        if (norm.z < 0.0)
+        if (norm.z < 0.0 && dir.z < 0.0)
             return 2;
     }
     
     if (prevIndex == 2)
     {
-        if (norm.x > 0.0)
+        if (norm.x > 0.0 && dir.x > 0.0)
             return 3;
-        if (norm.y > 0.0)
+        if (norm.y > 0.0 && dir.y > 0.0)
             return 6;
-        if (norm.z > 0.0)
+        if (norm.z > 0.0 && dir.z > 0.0)
             return 1;
     }
     
     if (prevIndex == 3)
     {
-        if (norm.x < 0.0)
+        if (norm.x < 0.0 && dir.x < 0.0)
             return 2;
-        if (norm.y > 0.0)
+        if (norm.y > 0.0 && dir.y > 0.0)
             return 7;
-        if (norm.z > 0.0)
+        if (norm.z > 0.0 && dir.z > 0.0)
             return 0;
     }
     
     //top row
     if (prevIndex == 4)
     {
-        if (norm.x < 0.0)
+        if (norm.x < 0.0 && dir.x < 0.0)
             return 5;
-        if (norm.y < 0.0)
+        if (norm.y < 0.0 && dir.y < 0.0)
             return 0;
-        if (norm.z < 0.0)
+        if (norm.z < 0.0 && dir.z < 0.0)
             return 7;
     }
     
     if (prevIndex == 5)
     {
-        if (norm.x > 0.0)
+        if (norm.x > 0.0 && dir.x > 0.0)
             return 4;
-        if (norm.y < 0.0)
+        if (norm.y < 0.0 && dir.y < 0.0)
             return 1;
-        if (norm.z < 0.0)
+        if (norm.z < 0.0 && dir.z < 0.0)
             return 6;
     }
     
     if (prevIndex == 6)
     {
-        if (norm.x > 0.0)
+        if (norm.x > 0.0 && dir.x > 0.0)
             return 7;
-        if (norm.y < 0.0)
+        if (norm.y < 0.0 && dir.y < 0.0)
             return 2;
-        if (norm.z > 0.0)
+        if (norm.z > 0.0 && dir.z > 0.0)
             return 5;
     }
     
     if (prevIndex == 7)
     {
-        if (norm.x < 0.0)
+        if (norm.x < 0.0 && dir.x < 0.0)
             return 6;
-        if (norm.y < 0.0)
+        if (norm.y < 0.0 && dir.y < 0.0)
             return 3;
-        if (norm.z > 0.0)
+        if (norm.z > 0.0 && dir.z > 0.0)
             return 4;
     }
     
@@ -575,9 +595,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
         float3 childPos = cameraPos + (retChild.x * dir);
 
-        uint childHitIndex = getChildIndex(rootPos, childPos, rootScale, cameraPos);
-        //if (childHitIndex > 7)
-        //    return float4(0, 0, 1, 1);
+        uint childHitIndex = getChildIndex(rootPos, childPos, rootScale, cameraPos, dir);
         float3 indexPos = childPos;
         child = getChildBox(rootPos, rootScale, childHitIndex);
 
@@ -588,13 +606,9 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         while (didNotHit)
         {
             retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
-
             childPos = cameraPos + (retChild.x * dir);
-            float3 childPosMax = cameraPos + (retChild.y * dir);
-
-            if (steps > 1000)
-                return float4(0, 0, 0, 1);
             
+            float3 childPosMax = cameraPos + (retChild.y * dir);
 
             if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
@@ -620,7 +634,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     rootIndex = getChildPointer(Elements[rootIndex], childHitIndex);
 
                     float3 downChild = cameraPos + (retChild.x * dir);
-                    childHitIndex = getChildIndex(rootPos, downChild, rootScale, cameraPos);
+                    childHitIndex = getChildIndex(rootPos, downChild, rootScale, cameraPos, dir);
                     //if (childHitIndex > 7)
                     //    return float4(1, 1, 1, 1);
 
@@ -670,9 +684,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             else
             {
                 childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex, dir);
-                if (childHitIndex > 7) return float4(0, 1, 0, 1);
-                //else return float4(0, 0, 1, 1);
-                //else if (childHitIndex > 7) return float4(0, 0, 0, 1);
+                if (childHitIndex > 7)
+                {
+                    return float4(0, 0, 0, 1);
+                }
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
             }
