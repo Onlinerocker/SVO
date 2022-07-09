@@ -33,6 +33,8 @@ cbuffer CameraInfo : register(b0)
 
     float3 PlacementPos;
     float RootRadius;
+
+    uint DebugMode;
 };
 
 cbuffer SVOInfo : register(b1)
@@ -607,6 +609,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         {
             retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
             childPos = cameraPos + (retChild.x * dir);
+
+            float3 dif = childPos - child.xyz;
+            dif = abs(dif);
+            float radThresh = child.w - 0.2f;
+            if (DebugMode == 1 && retChild.x > 0.0 && ((dif.x >= radThresh && dif.y >= radThresh) || (dif.z >= radThresh && dif.y >= radThresh) || (dif.x >= radThresh && dif.z >= radThresh)))
+            {
+                return float4(1, 1, 0, 1);
+            }
             
             float3 childPosMax = cameraPos + (retChild.y * dir);
 
@@ -645,6 +655,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     continue;
                 }
             }
+            else if(DebugMode == 1 && retChild.x > 0.0) return float4(0, 0, 0, 1);
             
             if (retChild.y >= rootExit)
             {
@@ -696,7 +707,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
         if (!didNotHit)
         {
-            float3 voxNorm = getNormal(child.xyz, indexPos, float3(1,1,1));
+            float3 voxNorm = getNormal(child.xyz, indexPos, float3(1, 1, 1));
             float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
             float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
@@ -713,7 +724,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 return placementColor;
             }
-            
+
             return float4(voxColor, 1);
         }
     }

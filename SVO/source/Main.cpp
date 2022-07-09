@@ -38,11 +38,14 @@ struct AppInfo
 
 	uint32_t hitIndex;
 	uint32_t hitChildIndex;
-	uint32_t padding;
+	uint32_t didHit;
 	uint32_t EditMode; //0 remove, 1 add
 
 	glm::vec3 placePos;
 	float rootRadius;
+
+	uint32_t debugMode{ 0 };
+	glm::vec3 padding;
 };
 
 struct InputData
@@ -332,7 +335,7 @@ int main()
 	ID3D10Blob* psError;
 
 	auto resv = D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "vertexMain", "vs_4_0", 0, 0, &vs, &vsError);
-	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &ps, &psError);
+	auto resp = D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "pixelMain", "ps_4_0", 0, 0, &ps, &psError);
 
 	if (vsError != nullptr) printf("\nVERTEX SHADER ERRORS:\n%s\n", (const char*)vsError->GetBufferPointer());
 	if (psError != nullptr) printf("\nPIXEL SHADER ERRORS:\n%s\n", (const char*)psError->GetBufferPointer());
@@ -455,9 +458,15 @@ int main()
 	ImGui_ImplSDL2_InitForD3D(window);
 	ImGui_ImplDX11_Init(dev, devCon);
 
-	bool didPressDown = false;
 	int frameCount = 0;
 	float totalSeconds = 0.0f;
+	float clickDelay = 0.0f;
+	float clickDelayThresh = 0.1f;
+
+	SDL_Event event;
+	SVO::HitReturn res;
+	int btn = 0;
+
 	while (true)
 	{
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
@@ -473,80 +482,29 @@ int main()
 			//frameCount = 0;
 		}
 
-		startTime = std::chrono::high_resolution_clock::now();
+		if (clickDelay < clickDelayThresh)
+		{
+			clickDelay += deltaTimeSec;
+		}
 
-        SDL_Event event;
+		startTime = std::chrono::high_resolution_clock::now();
 
         while (SDL_PollEvent(&event))
         {
 			ImGui_ImplSDL2_ProcessEvent(&event);
 			uint32_t mouseBtn = SDL_GetMouseState(&mouseX, &mouseY);
-			int btn = SDL_BUTTON(mouseBtn);
+			btn = SDL_BUTTON(mouseBtn);
 			input.rightMouse = (btn >= 2);
 
 			if (input.rightMouse)
 			{
 				SDL_SetRelativeMouseMode(SDL_TRUE);
 
-				if (btn == 16 && !didPressDown)
-				{
-					didPressDown = true;
-				}
-
-				SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
+				res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 				appInfo.hitIndex = res.index;
 				appInfo.hitChildIndex = res.childIndex;
-				appInfo.padding = res.didHit;
+				appInfo.didHit = res.didHit;
 				appInfo.placePos = res.position;
-
-				if (btn != 16 && didPressDown && appInfo.padding > 0)
-				{
-					didPressDown = false;
-					uint32_t stackInd = res.stackIndex;
-					uint32_t rootIndex = appInfo.hitIndex;
-					uint32_t hitChildIndex = appInfo.hitChildIndex;
-					
-					if(appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
-					else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
-
-					while (appInfo.EditMode == 0 ? (svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0 : (svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0)
-					{
-						rootIndex = res.stack[stackInd].index;
-						hitChildIndex = res.stack[stackInd].childIndex;
-						if(appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
-						else
-						{
-							if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
-							else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
-						}
-
-						destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
-						destRegion.right = destRegion.left + sizeof(SVO::Element);
-						destRegion.top = 0;
-						destRegion.bottom = 1;
-						destRegion.front = 0;
-						destRegion.back = 1;
-						devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
-
-						if (stackInd > 0) --stackInd;
-						else break;
-					}
-
-					destRegion.left = (int)(sizeof(SVO::Element) * appInfo.hitIndex);
-					destRegion.right = destRegion.left + sizeof(SVO::Element);
-					destRegion.top = 0;
-					destRegion.bottom = 1;
-					destRegion.front = 0;
-					destRegion.back = 1;
-					devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[appInfo.hitIndex], 0, 0);
-					--voxelCount;
-
-					res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
-					appInfo.hitIndex = res.index;
-					appInfo.hitChildIndex = res.childIndex;
-					appInfo.padding = res.didHit;
-					appInfo.placePos = res.position;
-				}
 			}
 			else
 			{
@@ -623,6 +581,55 @@ int main()
             }
         }
 
+		if (btn >= 16 && clickDelay >= clickDelayThresh && appInfo.didHit > 0)
+		{
+			clickDelay = 0.0f;
+			uint32_t stackInd = res.stackIndex;
+			uint32_t rootIndex = appInfo.hitIndex;
+			uint32_t hitChildIndex = appInfo.hitChildIndex;
+
+			if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+			else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+
+			while (appInfo.EditMode == 0 ? (svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0 : (svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0)
+			{
+				rootIndex = res.stack[stackInd].index;
+				hitChildIndex = res.stack[stackInd].childIndex;
+				if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+				else
+				{
+					if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
+					else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+				}
+
+				destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
+				destRegion.right = destRegion.left + sizeof(SVO::Element);
+				destRegion.top = 0;
+				destRegion.bottom = 1;
+				destRegion.front = 0;
+				destRegion.back = 1;
+				devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
+
+				if (stackInd > 0) --stackInd;
+				else break;
+			}
+
+			destRegion.left = (int)(sizeof(SVO::Element) * appInfo.hitIndex);
+			destRegion.right = destRegion.left + sizeof(SVO::Element);
+			destRegion.top = 0;
+			destRegion.bottom = 1;
+			destRegion.front = 0;
+			destRegion.back = 1;
+			devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[appInfo.hitIndex], 0, 0);
+			--voxelCount;
+
+			res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
+			appInfo.hitIndex = res.index;
+			appInfo.hitChildIndex = res.childIndex;
+			appInfo.didHit = res.didHit;
+			appInfo.placePos = res.position;
+		}
+
 		if (input.rightMouse)
 		{
 			if (input.w)
@@ -667,17 +674,20 @@ int main()
 		ImGui::Text("FPS %.1f", fps);
 		ImGui::Text("%0.2f ms", frameTime);
 		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
+		ImGui::Checkbox("Visualize octree", (bool*)(&appInfo.debugMode));
 		ImGui::End();
 
 		ImGui::Begin("Controls");
 		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode))
 		{
-			SVO::HitReturn res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
+			res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 			appInfo.hitIndex = res.index;
 			appInfo.hitChildIndex = res.childIndex;
-			appInfo.padding = res.didHit;
+			appInfo.didHit = res.didHit;
 			appInfo.placePos = res.position;
 		}
+
+		ImGui::InputFloat("Click Delay", &clickDelayThresh);
 
 		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 300.0f));
 		ImGui::End();
