@@ -87,7 +87,7 @@ int main()
 	printf("Starting Up...\n");
 
 	//Application info
-	const bool readFile = false;
+	const bool readFile = true;
 	const size_t treeDepth = 8;
 	const int32_t width = 1920;
 	const int32_t height = 1080;
