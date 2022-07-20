@@ -10,6 +10,11 @@ std::vector<SVO::Element>& SVO::vec()
 	return Elements;
 }
 
+std::vector<SVO::PosMapper>& SVO::posMap()
+{
+    return PositionMap;
+}
+
 float& SVO::rootRadius()
 {
     return mRootRadius;

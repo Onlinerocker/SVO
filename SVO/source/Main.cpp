@@ -6,6 +6,8 @@
 #include <d3dcompiler.h>
 #include <chrono>
 #include <random>
+#include <thread>
+#include <mutex>
 
 #include "glm/glm.hpp"
 
@@ -54,7 +56,20 @@ struct InputData
 	bool a{ false };
 	bool s{ false };
 	bool d{ false };
+	bool f{ false };
 	bool rightMouse{ false };
+};
+
+struct DeferUpdate
+{
+	D3D11_BOX destRegion;
+	size_t index;
+};
+
+struct DeferRaytrace
+{
+	glm::vec3 org;
+	glm::vec3 dir;
 };
 
 uint8_t* createWorld(size_t res)
@@ -82,6 +97,56 @@ char getBlockAt(char* world, size_t x, size_t y, size_t z)
 	return world[x + (y * 256) + (z * 256 * 256)];
 }
 
+void editVoxel(int& voxelCount, const SVO::HitReturn& res, const AppInfo& appInfo, SVO& svo, ID3D11DeviceContext* devCon, ID3D11Buffer* structuredBuffer, std::vector<DeferUpdate>& updates, uint8_t* updatedBlocks = nullptr)
+{
+	structuredBuffer;
+	devCon;
+
+	D3D11_BOX destRegion;
+	uint32_t stackInd = res.stackIndex;
+	uint32_t rootIndex = res.index;
+	uint32_t hitChildIndex = res.childIndex;
+
+	if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+	else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+
+	while (appInfo.EditMode == 0 ? (svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0 : (svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0)
+	{
+		rootIndex = res.stack[stackInd].index;
+		hitChildIndex = res.stack[stackInd].childIndex;
+		if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+		else
+		{
+			if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
+			else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+		}
+
+		destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
+		destRegion.right = destRegion.left + sizeof(SVO::Element);
+		destRegion.top = 0;
+		destRegion.bottom = 1;
+		destRegion.front = 0;
+		destRegion.back = 1;
+		//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
+		updates.push_back({ destRegion, rootIndex });
+		if (updatedBlocks != nullptr) updatedBlocks[rootIndex] = 0;
+
+		if (stackInd > 0) --stackInd;
+		else break;
+	}
+
+	destRegion.left = (int)(sizeof(SVO::Element) * res.index);
+	destRegion.right = destRegion.left + sizeof(SVO::Element);
+	destRegion.top = 0;
+	destRegion.bottom = 1;
+	destRegion.front = 0;
+	destRegion.back = 1;
+	//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[res.index], 0, 0);
+	updates.push_back({ destRegion, res.index });
+	if (updatedBlocks != nullptr) updatedBlocks[res.index] = 0;
+	--voxelCount;
+}
+
 int main()
 {
 	printf("Starting Up...\n");
@@ -92,7 +157,12 @@ int main()
 	const int32_t width = 1920;
 	const int32_t height = 1080;
 	float flightSpeed = 100.0f;
+	float destroyRad2 = 4.0f;
 	char mapFileName[100] = {'f', 'i', 'l', 'e', '\0'};
+
+	std::mutex mut;
+	std::vector<std::thread> threads;
+	threads.reserve(16);
 
 	Camera camera;
 	InputData input;
@@ -174,7 +244,8 @@ int main()
 		Block begin{ 0, 0, { 0, 0, 0 }, appInfo.rootRadius };
 		createStack.push_back(begin);
 		SVO::Element root{ 1, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
-		svo.vec().reserve(19173961*8);
+		//svo.vec().reserve(19173961*8);
+		//svo.posMap().reserve(svo.vec().capacity());
 		svo.vec().push_back(root);
 
 		while (createStack.size() > 0)
@@ -206,17 +277,21 @@ int main()
 			}
 
 			svo.vec()[cur.index].childPointer = (uint32_t)svo.vec().size();
+
 			for (int i = 0; i < 8; ++i)
 			{
 				SVO::Element item{ 123, static_cast<uint32_t>(0b00000000 << 24) | (0b00000000 << 16) };
+				glm::vec3 childPos = cur.pos + (offsets[i] * cur.radius);
+				float childRad = cur.radius / 2.0f;
+
 				if (cur.depth + 1 >= treeDepth)
 				{
 					item.masks = 0;
 					item.masks |= static_cast<uint32_t>(0b11111111 << 16);
+
+					svo.posMap().push_back({ childPos, svo.vec().size(), childRad });
 				}
 
-				float childRad = cur.radius / 2.0f;
-				glm::vec3 childPos = cur.pos + (offsets[i] * cur.radius);
 				
 				//bool didFind = false;
 				//for (float xMin = childPos.x - childRad + 0.5f; xMin <= childPos.x + childRad - 0.5f; ++xMin)
@@ -252,6 +327,9 @@ int main()
 		auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 		printf("gen time %lld\n", time.count());
 	}
+
+	uint8_t* updatedBlocks = new uint8_t[svo.vec().size()];
+	memset(updatedBlocks, 0, svo.vec().size());
 
 	//SDL Setup
 	SDL_Init(SDL_INIT_VIDEO);
@@ -439,7 +517,6 @@ int main()
 	//devCon->Map(structuredBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedStructuredBuffer);
 	//memcpy(mappedStructuredBuffer.pData, svo.vec().data(), structBuffDesc.ByteWidth);
 	//devCon->Unmap(structuredBuffer, 0);
-	D3D11_BOX destRegion;
 	auto start = std::chrono::high_resolution_clock::now();
 	devCon->UpdateSubresource(structuredBuffer, 0, nullptr, svo.vec().data(), 0, 0);
 	auto end = (std::chrono::high_resolution_clock::now());
@@ -462,6 +539,9 @@ int main()
 	float totalSeconds = 0.0f;
 	float clickDelay = 0.0f;
 	float clickDelayThresh = 0.1f;
+
+	std::vector<DeferUpdate> updates;
+	std::vector<DeferRaytrace> updatesTrace;
 
 	SDL_Event event;
 	SVO::HitReturn res;
@@ -537,6 +617,11 @@ int main()
 					{
 						input.d = true;
 					}
+					
+					if (event.key.keysym.scancode == SDL_SCANCODE_F)
+					{
+						input.f = true;
+					}
 					break;
 				}
 
@@ -557,6 +642,11 @@ int main()
 					else if (event.key.keysym.scancode == SDL_SCANCODE_D)
 					{
 						input.d = false;
+					}
+
+					if (event.key.keysym.scancode == SDL_SCANCODE_F)
+					{
+						input.f = false;
 					}
 					break;
 				}
@@ -581,47 +671,18 @@ int main()
             }
         }
 
+		//get voxel at function
+		//clear voxel at function
+
 		if (btn >= 16 && clickDelay >= clickDelayThresh && appInfo.didHit > 0)
 		{
 			clickDelay = 0.0f;
-			uint32_t stackInd = res.stackIndex;
-			uint32_t rootIndex = appInfo.hitIndex;
-			uint32_t hitChildIndex = appInfo.hitChildIndex;
-
-			if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
-			else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
-
-			while (appInfo.EditMode == 0 ? (svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0 : (svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0)
+			updates.clear();
+			editVoxel(voxelCount, res, appInfo, svo, devCon, structuredBuffer, updates);
+			for (size_t i = 0; i < updates.size(); ++i)
 			{
-				rootIndex = res.stack[stackInd].index;
-				hitChildIndex = res.stack[stackInd].childIndex;
-				if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
-				else
-				{
-					if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
-					else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
-				}
-
-				destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
-				destRegion.right = destRegion.left + sizeof(SVO::Element);
-				destRegion.top = 0;
-				destRegion.bottom = 1;
-				destRegion.front = 0;
-				destRegion.back = 1;
-				devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
-
-				if (stackInd > 0) --stackInd;
-				else break;
+				devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
 			}
-
-			destRegion.left = (int)(sizeof(SVO::Element) * appInfo.hitIndex);
-			destRegion.right = destRegion.left + sizeof(SVO::Element);
-			destRegion.top = 0;
-			destRegion.bottom = 1;
-			destRegion.front = 0;
-			destRegion.back = 1;
-			devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[appInfo.hitIndex], 0, 0);
-			--voxelCount;
 
 			res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 			appInfo.hitIndex = res.index;
@@ -649,8 +710,71 @@ int main()
 			{
 				appInfo.pos += glm::vec3(appInfo.right) * deltaTimeSec * flightSpeed;
 			}
+
+			static const int32_t leafMask = (0b11111111 << 16);
+			size_t test = 0;
+
+			if (input.f && clickDelay >= clickDelayThresh)
+			{
+				clickDelay = 0.0f;
+				//uint32_t oldMode = appInfo.EditMode;
+				//appInfo.EditMode = 0;
+
+				auto modifyVoxels = [&svo, &res, destroyRad2, devCon, &appInfo, &voxelCount, structuredBuffer, offsets, &test, &updates, updatedBlocks](size_t start, size_t end)
+				{
+					for (size_t i = start; i < end; ++i)
+					{
+						glm::vec3 pos = svo.posMap()[i].position;
+						glm::vec3 dist = pos - res.position;
+						if (glm::dot(dist, dist) < destroyRad2)
+						{
+							for (size_t j = 0; j < 8; ++j)
+							{
+								uint32_t modi = (uint32_t)j < 4 ? (uint32_t)j + 4 : (uint32_t)j - 4;
+								if (appInfo.EditMode < 1 ? (svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posMap()[i].index].masks & (1 << (24 + modi))) > 0 :
+								(svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0)
+								{
+									glm::vec3 dir = j < 4 ? glm::vec3(0, 1, 0) : glm::vec3(0, -1, 0);
+									glm::vec3 org = pos + (offsets[j] * svo.posMap()[i].rad);
+									SVO::HitReturn r = svo.getHit(org, dir, false, true);
+									if (r.didHit)
+									{
+										editVoxel(voxelCount, r, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
+										updatedBlocks[svo.posMap()[i].index] = 0;
+									}
+								}
+							}
+						}
+					}
+				};
+
+				//memset(updatedBlocks, 0, svo.vec().size());
+				//updates.clear();
+
+				modifyVoxels(0, svo.posMap().size());
+				
+				//appInfo.EditMode = oldMode;
+			}
+		}
+		
+		size_t i;
+		for (i = 0; i < updates.size(); ++i)
+		{
+			uint8_t val = updatedBlocks[updates[i].index];
+			if (val <= 0)
+			{
+				devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
+				updatedBlocks[updates[i].index] = 1;
+			}
 		}
 
+		updates.erase(updates.begin(), updates.begin() + i);
+
+		res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
+		appInfo.hitIndex = res.index;
+		appInfo.hitChildIndex = res.childIndex;
+		appInfo.didHit = res.didHit;
+		appInfo.placePos = res.position;
 
 		const FLOAT color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		devCon->ClearRenderTargetView(backbuffer, color);
@@ -690,6 +814,7 @@ int main()
 		ImGui::InputFloat("Click Delay", &clickDelayThresh);
 
 		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 300.0f));
+		(ImGui::SliderFloat("Destroy Radius Squared", &destroyRad2, 4.0f, 10000.0f));
 		ImGui::End();
 
 		ImGui::Begin("File");

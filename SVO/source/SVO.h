@@ -63,6 +63,13 @@ public:
 		uint32_t stackIndex;
 	};
 
+	struct PosMapper
+	{
+		float3 position;
+		size_t index;
+		float rad;
+	};
+
 public:
 
 	SVO() = default;
@@ -80,6 +87,8 @@ public:
 	std::vector<Element>& vec();
 	float& rootRadius();
 
+	std::vector<PosMapper>& posMap();
+
 	uint getValidMask(uint mask, uint index);
 	uint getLeafMask(uint mask, uint index);
 	uint getChildPointer(Element parentElement, uint index);
@@ -94,6 +103,7 @@ public:
 
 private:
 	std::vector<Element> Elements;
+	std::vector<PosMapper> PositionMap;
 	float mRootRadius{ 256.0f };
 
 };

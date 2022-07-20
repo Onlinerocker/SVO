@@ -44,6 +44,29 @@ cbuffer SVOInfo : register(b1)
 
 StructuredBuffer<SVOElement> Elements : register(t0);
 
+float2 raytraceSphere(float3 spherePos, float radius, float3 cameraPos, float3 rayDir)
+{
+    float2 ret = float2(-1, -1);
+    float3 sphereRel = spherePos - cameraPos;
+    float projOrigin = dot(sphereRel, rayDir);
+
+    if (projOrigin < 0) return ret;
+
+    float rad2 = radius * radius;
+
+    //L^2 + projOrigin^2 = length(spherePos - cameraPos) ^ 2
+    float L2 = dot(sphereRel, sphereRel) - (projOrigin * projOrigin);
+
+    if (L2 > rad2) return ret;
+
+    float x = sqrt(rad2 - L2);
+
+    ret.x = projOrigin - x;
+    ret.y = projOrigin + x;
+
+    return ret;
+}
+
 float calculateT(float plane, float origin, float direction)
 {
     if (plane - origin == 0.0f && direction == 0.0f) return 999999.0;
@@ -462,12 +485,16 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     y /= -540.0;
     x *= (1280.0 / 720.0);
 
+
     ParentElement stack[64];
     uint stackIndex = 0;
 
     float3 cameraPos = CamPos; //float3(-1, 0.7, 0);
     float3 dir = (x * Right.xyz) + (y * Up.xyz) + Forward.xyz;
     dir = normalize(dir);
+
+    //float2 sr = raytraceSphere(float3(0, 0, 0), 100.0, cameraPos, dir);
+    //if (sr.x > 0.0) return float4(0, 0.3, 0.7, 1) * (0.5 + sin(Time * 7)*0.2);
 
     float4 placementColor = float4(0, 0.5 + 0.2 * sin(Time * 7), 0, 1);
     float3 retPlace = raytraceBox(PlacementPos.xyz, 0.5, cameraPos, dir);
@@ -612,7 +639,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                 }
                 if (childHitIndex > 7)
                 {
-                    return escapeColor;
+                    return float4(1,0,0,1);
                 }
                 indexPos = childPosMax;
                 child = getChildBox(rootPos, rootScale, childHitIndex);
