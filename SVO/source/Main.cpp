@@ -114,7 +114,11 @@ void editVoxel(int& voxelCount, const SVO::HitReturn& res, const AppInfo& appInf
 	{
 		rootIndex = res.stack[stackInd].index;
 		hitChildIndex = res.stack[stackInd].childIndex;
-		if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+		if (appInfo.EditMode == 0)
+		{
+			uint32_t mask = (~((1 << hitChildIndex) << 24));
+			svo.vec().data()[rootIndex].masks &= mask;
+		}
 		else
 		{
 			if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
@@ -144,6 +148,60 @@ void editVoxel(int& voxelCount, const SVO::HitReturn& res, const AppInfo& appInf
 	//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[res.index], 0, 0);
 	updates.push_back({ destRegion, res.index });
 	if (updatedBlocks != nullptr) updatedBlocks[res.index] = 0;
+	--voxelCount;
+}
+
+void editVoxelUseMap(int& voxelCount, uint32_t index, uint32_t childIndex, const AppInfo& appInfo, SVO& svo, ID3D11DeviceContext* devCon, ID3D11Buffer* structuredBuffer, std::vector<DeferUpdate>& updates, uint8_t* updatedBlocks = nullptr)
+{
+	structuredBuffer;
+	devCon;
+	updatedBlocks;
+	updates;
+
+	D3D11_BOX destRegion;
+	uint32_t rootIndex = index;
+	uint32_t hitChildIndex = childIndex;
+
+	if (appInfo.EditMode == 0) svo.vec().data()[rootIndex].masks &= (~((1 << hitChildIndex) << 24));
+	else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+
+	while (appInfo.EditMode == 0 ? (svo.vec().data()[rootIndex].masks & (0b11111111 << 24)) == 0 : (svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0)
+	{
+		hitChildIndex = svo.posMap()[rootIndex].child;
+		rootIndex = (uint32_t)svo.posMap()[rootIndex].parent;
+		if (appInfo.EditMode == 0)
+		{
+			uint32_t mask = (~((1 << hitChildIndex) << 24));
+			svo.vec().data()[rootIndex].masks &= mask;
+		}
+		else
+		{
+			if ((svo.vec().data()[rootIndex].masks & ((1 << hitChildIndex) << 24)) > 0) break;
+			else svo.vec().data()[rootIndex].masks |= (((1 << hitChildIndex) << 24));
+		}
+
+		destRegion.left = (int)(sizeof(SVO::Element) * rootIndex);
+		destRegion.right = destRegion.left + sizeof(SVO::Element);
+		destRegion.top = 0;
+		destRegion.bottom = 1;
+		destRegion.front = 0;
+		destRegion.back = 1;
+		//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
+		updates.push_back({ destRegion, rootIndex });
+		if (updatedBlocks != nullptr) updatedBlocks[rootIndex] = 0;
+
+		if (rootIndex <= 0) break;
+	}
+
+	destRegion.left = (int)(sizeof(SVO::Element) * index);
+	destRegion.right = destRegion.left + sizeof(SVO::Element);
+	destRegion.top = 0;
+	destRegion.bottom = 1;
+	destRegion.front = 0;
+	destRegion.back = 1;
+	//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[index], 0, 0);
+	updates.push_back({ destRegion, index });
+	if (updatedBlocks != nullptr) updatedBlocks[index] = 0;
 	--voxelCount;
 }
 
@@ -247,6 +305,7 @@ int main()
 		//svo.vec().reserve(19173961*8);
 		//svo.posMap().reserve(svo.vec().capacity());
 		svo.vec().push_back(root);
+		svo.posMap().push_back({ glm::vec3(0,0,0), 0, appInfo.rootRadius });
 
 		while (createStack.size() > 0)
 		{
@@ -288,8 +347,6 @@ int main()
 				{
 					item.masks = 0;
 					item.masks |= static_cast<uint32_t>(0b11111111 << 16);
-
-					svo.posMap().push_back({ childPos, svo.vec().size(), childRad });
 				}
 
 				
@@ -314,6 +371,7 @@ int main()
 				//	}
 				//}
 
+				svo.posMap().push_back({ childPos, svo.vec().size(), childRad, cur.index, (uint8_t)i });
 				svo.vec().push_back(item);
 
 				Block childBlock = { svo.vec().size() - 1, cur.depth + 1, childPos, childRad };
@@ -678,7 +736,8 @@ int main()
 		{
 			clickDelay = 0.0f;
 			updates.clear();
-			editVoxel(voxelCount, res, appInfo, svo, devCon, structuredBuffer, updates);
+			editVoxelUseMap(voxelCount, res.index, res.childIndex, appInfo, svo, devCon, structuredBuffer, updates);
+			//editVoxel(voxelCount, res, appInfo, svo, devCon, structuredBuffer, updates);
 			for (size_t i = 0; i < updates.size(); ++i)
 			{
 				devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
@@ -730,18 +789,18 @@ int main()
 						{
 							for (size_t j = 0; j < 8; ++j)
 							{
-								uint32_t modi = (uint32_t)j < 4 ? (uint32_t)j + 4 : (uint32_t)j - 4;
+								uint32_t modi = (uint32_t)j;
 								if (appInfo.EditMode < 1 ? (svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posMap()[i].index].masks & (1 << (24 + modi))) > 0 :
 								(svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0)
 								{
-									glm::vec3 dir = j < 4 ? glm::vec3(0, 1, 0) : glm::vec3(0, -1, 0);
-									glm::vec3 org = pos + (offsets[j] * svo.posMap()[i].rad);
-									SVO::HitReturn r = svo.getHit(org, dir, false, true);
-									if (r.didHit)
-									{
-										editVoxel(voxelCount, r, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
-										updatedBlocks[svo.posMap()[i].index] = 0;
-									}
+									//glm::vec3 dir = j < 4 ? glm::vec3(0, 1, 0) : glm::vec3(0, -1, 0);
+									//glm::vec3 org = pos + (offsets[j] * svo.posMap()[i].rad);
+									//SVO::HitReturn r = svo.getHit(org, dir, false, true);
+									//if (r.didHit)
+									//{
+									//}
+									editVoxelUseMap(voxelCount, (uint32_t)svo.posMap()[i].index, modi, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
+									updatedBlocks[svo.posMap()[i].index] = 0;
 								}
 							}
 						}

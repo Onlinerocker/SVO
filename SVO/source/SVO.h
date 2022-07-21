@@ -68,6 +68,8 @@ public:
 		float3 position;
 		size_t index;
 		float rad;
+		size_t parent{ 0 };
+		uint8_t child{ 0 };
 	};
 
 public:
