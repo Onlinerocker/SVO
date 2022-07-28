@@ -34,7 +34,10 @@ cbuffer CameraInfo : register(b0)
     float3 PlacementPos;
     float RootRadius;
 
+    float4 Explosion;
+
     uint DebugMode;
+    float3 ExplosionRadius;
 };
 
 cbuffer SVOInfo : register(b1)
@@ -493,8 +496,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     float3 dir = (x * Right.xyz) + (y * Up.xyz) + Forward.xyz;
     dir = normalize(dir);
 
-    //float2 sr = raytraceSphere(float3(0, 0, 0), 100.0, cameraPos, dir);
-    //if (sr.x > 0.0) return float4(0, 0.3, 0.7, 1) * (0.5 + sin(Time * 7)*0.2);
+    float3 explosionColor = float3(1, 1, 1);
+    float srRad = (0.5 + (-cos(Explosion.w * 2 * PI) * 0.5));
+    float2 sr = Explosion.w >= 0.0f ? raytraceSphere(Explosion.xyz, ExplosionRadius.x * srRad, cameraPos, dir) : float2(-1, -1);
+    if (sr.x <= 0.0 && sr.y >= 0.0) return float4(explosionColor.xyz, 1);
 
     float4 placementColor = float4(0, 0.5 + 0.2 * sin(Time * 7), 0, 1);
     float3 retPlace = raytraceBox(PlacementPos.xyz, 0.5, cameraPos, dir);
@@ -595,34 +600,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                         return placementColor;
                     }
             
+                    if (sr.x >= 0.0)
+                    {
+                        return float4(explosionColor, 1);
+                    }
                     return escapeColor;
                 }
             }
-            //    else
-            //    {
-            //        --stackIndex;
-            //        rootPos = stack[stackIndex].pos;
-            //        rootScale = stack[stackIndex].scale;
-            //        rootExit = stack[stackIndex].exit;
-            //        rootIndex = stack[stackIndex].index;
-            //
-            //        childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir, retChild.z);
-            //        while (childHitIndex > 7 && stackIndex >= 1)
-            //        {
-            //            --stackIndex;
-            //            rootPos = stack[stackIndex].pos;
-            //            rootScale = stack[stackIndex].scale;
-            //            rootExit = stack[stackIndex].exit;
-            //            rootIndex = stack[stackIndex].index;
-            //
-            //            childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir, retChild.z);
-            //        }
-            //            
-            //        indexPos = childPosMax;
-            //        child = getChildBox(rootPos, rootScale, childHitIndex);
-            //    }
-            //}
-            //else
+
             {
                 childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex, dir, retChild.z);
                 while (childHitIndex > 7 && stackIndex >= 1)
@@ -656,6 +641,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(-movingLight - indexPos)), 0, 1)) * 1.5) * 1.0f;
             voxColor += diffColor * ((clamp(dot(voxNorm, normalize(float3(0, 0, movingLight.x) - indexPos)), 0, 1)) * 1.5) * 1.0f;
 
+            if (Explosion.w >= 0.0 && Explosion.w < 1.0)
+            {
+                float3 toEx = Explosion.xyz - indexPos;
+                float toExLen2 = dot(toEx, toEx);
+                float att = (srRad / 1.0f) * clamp((ExplosionRadius.x* ExplosionRadius.x * ExplosionRadius.x)/toExLen2, 0, 1);
+                voxColor += diffColor * ((clamp(dot(voxNorm, normalize(toEx)), 0, 1)) * 1.5) * att;
+            }
+
             //return lerp(float4(voxColor, 1), noHitColor, saturate(retChild.x / 100.0f));
             if (EditMode == 0 && HitIndex == rootIndex && HitChildIndex == childHitIndex)
             {
@@ -666,11 +659,20 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 return placementColor;
             }
+            else if (sr.x >= 0.0 && sr.x < retChild.x)
+            {
+                return float4(explosionColor, 1);
+            }
 
             return float4(voxColor, 1);
         }
     }
     
+    if (sr.x >= 0.0)
+    {
+        return float4(explosionColor, 1);
+    }
+
     return float4(0.2, 0.2, 0.2, 1);
 
 }

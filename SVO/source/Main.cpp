@@ -46,8 +46,10 @@ struct AppInfo
 	glm::vec3 placePos;
 	float rootRadius;
 
+	glm::vec4 explosion{ 0.0f, 0.0f, 0.0f, -1.0f };
+
 	uint32_t debugMode{ 0 };
-	glm::vec3 padding;
+	glm::vec3 explosionRadius;
 };
 
 struct InputData
@@ -254,6 +256,7 @@ int main()
 	//int blockInd = 0;
 	int voxelCount = 0;
 	int voxelTotal = 0;
+	float deltaExplosionMod = 0.0f;
 	SVO svo(treeDepth + 1);
 
 	std::vector<Block> createStack;
@@ -604,6 +607,8 @@ int main()
 	SDL_Event event;
 	SVO::HitReturn res;
 	int btn = 0;
+	bool didExplode = false;
+	bool fancyExplosion = false;
 
 	while (true)
 	{
@@ -620,9 +625,46 @@ int main()
 			//frameCount = 0;
 		}
 
-		if (clickDelay < clickDelayThresh)
+		if (clickDelay < (fancyExplosion ? 1.0f : clickDelayThresh))
 		{
-			clickDelay += deltaTimeSec;
+			clickDelay += deltaTimeSec - deltaExplosionMod;
+		}
+
+		auto modifyVoxels = [&svo, &res, destroyRad2, devCon, &appInfo, &voxelCount, structuredBuffer, offsets, &updates, updatedBlocks, fancyExplosion](size_t start, size_t end)
+		{
+			for (size_t i = start; i < end; ++i)
+			{
+				glm::vec3 pos = svo.posMap()[i].position;
+				glm::vec3 dist = pos - (fancyExplosion ? glm::vec3(appInfo.explosion) : res.position);
+				if (glm::dot(dist, dist) < destroyRad2)
+				{
+					for (size_t j = 0; j < 8; ++j)
+					{
+						uint32_t modi = (uint32_t)j;
+						if (appInfo.EditMode < 1 ? (svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posMap()[i].index].masks & (1 << (24 + modi))) > 0 :
+						(svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0)
+						{
+							editVoxelUseMap(voxelCount, (uint32_t)svo.posMap()[i].index, modi, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
+							updatedBlocks[svo.posMap()[i].index] = 0;
+						}
+					}
+				}
+			}
+		};
+
+		if (appInfo.explosion.w >= 0.0f && appInfo.explosion.w < 1.0f)
+		{
+			appInfo.explosion.w += deltaTimeSec - deltaExplosionMod;
+			if (fancyExplosion && !didExplode && appInfo.explosion.w >= 0.5f)
+			{
+				modifyVoxels(0, svo.posMap().size());
+				didExplode = true;
+			}
+		}
+		
+		if(appInfo.explosion.w > 1.0f)
+		{
+			appInfo.explosion.w = 1.0f;
 		}
 
 		startTime = std::chrono::high_resolution_clock::now();
@@ -737,7 +779,6 @@ int main()
 			clickDelay = 0.0f;
 			updates.clear();
 			editVoxelUseMap(voxelCount, res.index, res.childIndex, appInfo, svo, devCon, structuredBuffer, updates);
-			//editVoxel(voxelCount, res, appInfo, svo, devCon, structuredBuffer, updates);
 			for (size_t i = 0; i < updates.size(); ++i)
 			{
 				devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
@@ -771,51 +812,24 @@ int main()
 			}
 
 			static const int32_t leafMask = (0b11111111 << 16);
-			size_t test = 0;
 
-			if (input.f && clickDelay >= clickDelayThresh)
+			if (input.f && res.didHit && clickDelay >= (fancyExplosion ? 1.0f : clickDelayThresh))
 			{
 				clickDelay = 0.0f;
-				//uint32_t oldMode = appInfo.EditMode;
-				//appInfo.EditMode = 0;
-
-				auto modifyVoxels = [&svo, &res, destroyRad2, devCon, &appInfo, &voxelCount, structuredBuffer, offsets, &test, &updates, updatedBlocks](size_t start, size_t end)
+				if (fancyExplosion)
 				{
-					for (size_t i = start; i < end; ++i)
-					{
-						glm::vec3 pos = svo.posMap()[i].position;
-						glm::vec3 dist = pos - res.position;
-						if (glm::dot(dist, dist) < destroyRad2)
-						{
-							for (size_t j = 0; j < 8; ++j)
-							{
-								uint32_t modi = (uint32_t)j;
-								if (appInfo.EditMode < 1 ? (svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posMap()[i].index].masks & (1 << (24 + modi))) > 0 :
-								(svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0)
-								{
-									//glm::vec3 dir = j < 4 ? glm::vec3(0, 1, 0) : glm::vec3(0, -1, 0);
-									//glm::vec3 org = pos + (offsets[j] * svo.posMap()[i].rad);
-									//SVO::HitReturn r = svo.getHit(org, dir, false, true);
-									//if (r.didHit)
-									//{
-									//}
-									editVoxelUseMap(voxelCount, (uint32_t)svo.posMap()[i].index, modi, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
-									updatedBlocks[svo.posMap()[i].index] = 0;
-								}
-							}
-						}
-					}
-				};
-
-				//memset(updatedBlocks, 0, svo.vec().size());
-				//updates.clear();
-
-				modifyVoxels(0, svo.posMap().size());
-				
-				//appInfo.EditMode = oldMode;
+					appInfo.explosion = glm::vec4(res.position, 0.0f);
+					appInfo.explosionRadius.x = glm::sqrt(destroyRad2);
+					didExplode = false;
+				}
+				else
+				{
+					modifyVoxels(0, svo.posMap().size());
+				}
 			}
 		}
 		
+		auto preExUp = std::chrono::high_resolution_clock::now();
 		size_t i;
 		for (i = 0; i < updates.size(); ++i)
 		{
@@ -826,6 +840,8 @@ int main()
 				updatedBlocks[updates[i].index] = 1;
 			}
 		}
+		deltaExplosionMod = (float)std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - preExUp).count();
+		deltaExplosionMod /= 1000000.0f;
 
 		updates.erase(updates.begin(), updates.begin() + i);
 
@@ -858,10 +874,14 @@ int main()
 		ImGui::Text("%0.2f ms", frameTime);
 		ImGui::Text("Pos: %0.5f, %0.5f, %0.5f", appInfo.pos.x, appInfo.pos.y, appInfo.pos.z);
 		ImGui::Checkbox("Visualize octree", (bool*)(&appInfo.debugMode));
+		
+		ImGui::Checkbox("Fancy Delete", &fancyExplosion);
 		ImGui::End();
 
+		if (fancyExplosion) appInfo.EditMode = 0;
+
 		ImGui::Begin("Controls");
-		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode))
+		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode) && !fancyExplosion)
 		{
 			res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 			appInfo.hitIndex = res.index;
@@ -870,7 +890,7 @@ int main()
 			appInfo.placePos = res.position;
 		}
 
-		ImGui::InputFloat("Click Delay", &clickDelayThresh);
+		if(!fancyExplosion) ImGui::InputFloat("Click Delay", &clickDelayThresh);
 
 		(ImGui::SliderFloat("Flight speed", &flightSpeed, 1.0f, 300.0f));
 		(ImGui::SliderFloat("Destroy Radius Squared", &destroyRad2, 4.0f, 10000.0f));
@@ -903,10 +923,6 @@ int main()
 			ImGui::EndPopup();
 		}
 
-		if (ImGui::Button("Load Map"))
-		{
-
-		}
 		ImGui::End();
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
