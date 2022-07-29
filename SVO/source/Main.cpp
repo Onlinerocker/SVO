@@ -876,18 +876,21 @@ int main()
 		ImGui::Checkbox("Visualize octree", (bool*)(&appInfo.debugMode));
 		
 		ImGui::Checkbox("Fancy Delete", &fancyExplosion);
+		{
+			if (fancyExplosion) appInfo.EditMode = 0;
+		}
+
 		ImGui::End();
 
-		if (fancyExplosion) appInfo.EditMode = 0;
-
 		ImGui::Begin("Controls");
-		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode) && !fancyExplosion)
+		if(ImGui::Checkbox("Add Voxels", (bool*)&appInfo.EditMode))
 		{
 			res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 			appInfo.hitIndex = res.index;
 			appInfo.hitChildIndex = res.childIndex;
 			appInfo.didHit = res.didHit;
 			appInfo.placePos = res.position;
+			if (appInfo.EditMode == 1) fancyExplosion = false;
 		}
 
 		if(!fancyExplosion) ImGui::InputFloat("Click Delay", &clickDelayThresh);

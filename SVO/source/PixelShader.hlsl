@@ -4,8 +4,6 @@ struct SVOElement
 {
     uint childPointer;
     uint masks;
-    //uint pad;
-    //uint pad1;
 };
 
 struct ParentElement
@@ -168,15 +166,8 @@ uint getLeafMask(uint mask, uint index)
     return mask & x;
 }
 
-/* Could use extra space in SVO to store this information */
 uint getChildPointer(SVOElement parentElement, uint index)
 {
-    //uint curPos = 0;
-    //for (uint i = 0; i < index; ++i)
-    //{
-    //    if (getValidMask(parentElement.masks, i) > 0 && getLeafMask(parentElement.masks, i) == 0)
-    //        ++curPos;
-    //}
     return parentElement.childPointer + index;
 }
 
@@ -328,11 +319,6 @@ float3 getNormal(float3 boxPos, float3 pos, float3 dir)
     float3 v = pos - boxPos;
     float3 vAbs = abs(v);
 
-    //if (vAbs.x == vAbs.y && vAbs.x != vAbs.z)
-    //{
-    //    return sign(v.x) * float3(1, 0, 0) + sign(v.y) * float3(0, 1, 0);
-    //}
-
     float3 norm = float3(0, 0, 0);
     float dMax = -1.0f;
 
@@ -341,49 +327,25 @@ float3 getNormal(float3 boxPos, float3 pos, float3 dir)
     {
         float3 normX = sign(v.x) * float3(1, 0, 0);
         norm += normX;
-        //float d = dot(normX, dir);
-        //if (d > dMax)
-        //{
-        //    dMax = d;
-        //    norm = normX;
-        //}
     }
 
     if (vAbs.y >= vAbs.x && vAbs.y >= vAbs.z && dir.y != 0.0)
     {
         float3 normY = sign(v.y) * float3(0, 1, 0);
         norm += normY;
-        //float d = dot(normY, dir);
-        //if (d > dMax)
-        //{
-        //    dMax = d;
-        //    norm = normY;
-        //}
     }
 
     if (vAbs.z >= vAbs.x && vAbs.z >= vAbs.y && dir.z != 0.0)
     {
         float3 normZ = sign(v.z) * float3(0, 0, 1);
         norm += normZ;
-        //float d = dot(normZ, dir);
-        //if (d > dMax)
-        //{
-        //    dMax = d;
-        //    norm = normZ;
-        //}
     }
 
     return norm;
 }
 
-uint getChildIndexNext(float3 boxPos, float3 pos, float rootScale, uint prevIndex, float3 dir, float axis)
+uint getChildIndexNext(uint prevIndex, float3 dir, float axis)
 {
-    //float4 prev = getChildBox(boxPos, rootScale, prevIndex);
-    //get max axis
-    //move on that axis in the correct direction
-    
-    //if you hit a corner or edge... enter on the side closest to you... exit on the side farther from you...
-
     if (prevIndex == 0)
     {
         if ((axis == 0.0 || axis == 3.0 || axis == 5.0 || axis == 6.0) && dir.x < 0.0)
@@ -492,13 +454,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     ParentElement stack[64];
     uint stackIndex = 0;
 
-    float3 cameraPos = CamPos; //float3(-1, 0.7, 0);
+    float3 cameraPos = CamPos;
     float3 dir = (x * Right.xyz) + (y * Up.xyz) + Forward.xyz;
     dir = normalize(dir);
 
     float3 explosionColor = float3(1, 1, 1);
     float srRad = (0.5 + (-cos(Explosion.w * 2 * PI) * 0.5));
-    float2 sr = Explosion.w >= 0.0f ? raytraceSphere(Explosion.xyz, ExplosionRadius.x * srRad, cameraPos, dir) : float2(-1, -1);
+    float curExRad = ExplosionRadius.x * srRad;
+    float2 sr = Explosion.w >= 0.0f ? raytraceSphere(Explosion.xyz, curExRad, cameraPos, dir) : float2(-1, -1);
     if (sr.x <= 0.0 && sr.y >= 0.0) return float4(explosionColor.xyz, 1);
 
     float4 placementColor = float4(0, 0.5 + 0.2 * sin(Time * 7), 0, 1);
@@ -516,6 +479,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
     {
         float4 child = float4(rootPos, rootScale);
         float3 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
+        float rootD = retChild.x;
         
         float rootExit = retChild.y;
         float exitMax = retChild.y;
@@ -547,6 +511,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             float3 dif = childPos - child.xyz;
             dif = abs(dif);
             float radThresh = child.w - 0.2f;
+            
             if (DebugMode == 1 && retChild.x > 0.0 && ((dif.x >= radThresh && dif.y >= radThresh) || (dif.z >= radThresh && dif.y >= radThresh) || (dif.x >= radThresh && dif.z >= radThresh)))
             {
                 return float4(1, 1, 0, 1);
@@ -579,8 +544,6 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
                     float3 downChild = cameraPos + (retChild.x * dir);
                     childHitIndex = getChildIndex(rootPos, downChild, rootScale, cameraPos, dir);
-                    //if (childHitIndex > 7)
-                    //    return float4(1, 1, 1, 1);
 
                     indexPos = childPos;
                     child = getChildBox(rootPos, rootScale, childHitIndex);
@@ -589,7 +552,11 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                     continue;
                 }
             }
-            else if(DebugMode == 1 && retChild.x > 0.0) return float4(0, 0, 0, 1);
+            else if (DebugMode == 1 && retChild.x > 0.0)
+            {
+                if (sr.x >= rootD && sr.x < retChild.x) return float4(1, 0, 0, 1);
+                return float4(0, 0, 0, 1);
+            }
             
             if (retChild.y >= rootExit)
             {
@@ -609,7 +576,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             }
 
             {
-                childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, childHitIndex, dir, retChild.z);
+                childHitIndex = getChildIndexNext(childHitIndex, dir, retChild.z);
                 while (childHitIndex > 7 && stackIndex >= 1)
                 {
                     --stackIndex;
@@ -620,7 +587,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
                     float4 childTemp = getChildBox(rootPos, rootScale, stack[stackIndex].childIndex);
                     float3 retTemp = raytraceBox(childTemp.xyz, childTemp.w, cameraPos, dir);
-                    childHitIndex = getChildIndexNext(rootPos, childPosMax, rootScale, stack[stackIndex].childIndex, dir, retTemp.z);
+                    childHitIndex = getChildIndexNext(stack[stackIndex].childIndex, dir, retTemp.z);
                 }
                 if (childHitIndex > 7)
                 {
@@ -634,6 +601,13 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
         if (!didNotHit)
         {
+            if(DebugMode == 1)
+            {
+                float3 diffSphere = Explosion.xyz - indexPos;
+                float dotSphere = dot(diffSphere, diffSphere);
+                if(dotSphere < srRad * srRad * ExplosionRadius.x * ExplosionRadius.x) return float4(1, 0, 0, 1);
+            }
+
             float3 voxNorm = getNormal(child.xyz, indexPos, float3(1, 1, 1));
             float3 diffColor = lerp(float3(0.43, 0.31, 0.22) * 0.3, float3(0, 0.3, 0), smoothstep(100.0, 200.0, indexPos.y));
             float3 voxColor = diffColor * clamp(dot(voxNorm, normalize(dirLight)), 0, 1) * 2.0;
@@ -645,11 +619,10 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 float3 toEx = Explosion.xyz - indexPos;
                 float toExLen2 = dot(toEx, toEx);
-                float att = (srRad / 1.0f) * clamp((ExplosionRadius.x* ExplosionRadius.x * ExplosionRadius.x)/toExLen2, 0, 1);
+                float att = clamp((curExRad * curExRad)/toExLen2, 0, 1) * 10.0f;
                 voxColor += diffColor * ((clamp(dot(voxNorm, normalize(toEx)), 0, 1)) * 1.5) * att;
             }
 
-            //return lerp(float4(voxColor, 1), noHitColor, saturate(retChild.x / 100.0f));
             if (EditMode == 0 && HitIndex == rootIndex && HitChildIndex == childHitIndex)
             {
                 float pulse = 0.2 * sin(Time * 7);
@@ -659,7 +632,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 return placementColor;
             }
-            else if (sr.x >= 0.0 && sr.x < retChild.x)
+            else if (DebugMode != 1 && sr.x >= 0.0 && sr.x < retChild.x)
             {
                 return float4(explosionColor, 1);
             }
