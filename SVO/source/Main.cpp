@@ -157,8 +157,6 @@ void editVoxelUseMap(int& voxelCount, uint32_t index, uint32_t childIndex, const
 {
 	structuredBuffer;
 	devCon;
-	updatedBlocks;
-	updates;
 
 	D3D11_BOX destRegion;
 	uint32_t rootIndex = index;
@@ -189,8 +187,11 @@ void editVoxelUseMap(int& voxelCount, uint32_t index, uint32_t childIndex, const
 		destRegion.front = 0;
 		destRegion.back = 1;
 		//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[rootIndex], 0, 0);
-		updates.push_back({ destRegion, rootIndex });
-		if (updatedBlocks != nullptr) updatedBlocks[rootIndex] = 0;
+		if (updatedBlocks[rootIndex] == 0)
+		{
+			updates.push_back({ destRegion, rootIndex });
+			updatedBlocks[rootIndex] = 1;
+		}
 
 		if (rootIndex <= 0) break;
 	}
@@ -202,8 +203,11 @@ void editVoxelUseMap(int& voxelCount, uint32_t index, uint32_t childIndex, const
 	destRegion.front = 0;
 	destRegion.back = 1;
 	//devCon->UpdateSubresource(structuredBuffer, 0, &destRegion, &svo.vec().data()[index], 0, 0);
-	updates.push_back({ destRegion, index });
-	if (updatedBlocks != nullptr) updatedBlocks[index] = 0;
+	if (updatedBlocks != nullptr && updatedBlocks[index] == 0)
+	{
+		updates.push_back({ destRegion, index });
+		updatedBlocks[index] = 1;
+	}
 	--voxelCount;
 }
 
@@ -319,7 +323,8 @@ int main()
 			{
 				for (int i = 0; i < 8; ++i)
 				{
-					bool isIn = isInWorld(cur.pos);
+					glm::vec3 vpos = cur.pos + offsets[i] * cur.radius;
+					bool isIn = isInWorld(vpos);
 					if (isIn)
 					{
 						++voxelCount;
@@ -350,6 +355,7 @@ int main()
 				{
 					item.masks = 0;
 					item.masks |= static_cast<uint32_t>(0b11111111 << 16);
+					svo.posIndexMap().push_back({ childPos, svo.vec().size() });
 				}
 
 				
@@ -386,6 +392,19 @@ int main()
 
 		auto end = (std::chrono::high_resolution_clock::now());
 		auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+		auto sortHeuristic = [](SVO::PosIndex pos, SVO::PosIndex other)
+		{
+			pos.position += glm::vec3(255.0f, 255.0f, 255.0f);
+			other.position += glm::vec3(255.0f, 255.0f, 255.0f);
+
+			pos.position /= 2.0f;
+			other.position /= 2.0f;
+
+			return (pos.position.x + (pos.position.y * 256.0f) + (pos.position.z * 256.0f * 256.0f)) < (other.position.x + (other.position.y * 256.0f) + (other.position.z * 256.0f * 256.0f));
+		};
+
+		std::sort(svo.posIndexMap().begin(), svo.posIndexMap().end(), sortHeuristic);
 		printf("gen time %lld\n", time.count());
 	}
 
@@ -630,22 +649,46 @@ int main()
 			clickDelay += deltaTimeSec - deltaExplosionMod;
 		}
 
-		auto modifyVoxels = [&svo, &res, destroyRad2, devCon, &appInfo, &voxelCount, structuredBuffer, offsets, &updates, updatedBlocks, fancyExplosion](size_t start, size_t end)
+		auto modifyVoxels = [&svo, &res, destroyRad2, devCon, &appInfo, &voxelCount, structuredBuffer, offsets, &updates, updatedBlocks, fancyExplosion]()
 		{
-			for (size_t i = start; i < end; ++i)
+			int rad = (int)glm::sqrt(destroyRad2);
+
+			int xs = (int)res.position.x;
+			xs += 256;
+			xs /= 2;
+
+			int ys = (int)res.position.y;
+			ys += 256;
+			ys /= 2;
+
+			int zs = (int)res.position.z;
+			zs += 256;
+			zs /= 2;
+
+			for (int x = xs - rad; x <= xs + rad; ++x)
 			{
-				glm::vec3 pos = svo.posMap()[i].position;
-				glm::vec3 dist = pos - (fancyExplosion ? glm::vec3(appInfo.explosion) : res.position);
-				if (glm::dot(dist, dist) < destroyRad2)
+				for (int y = ys - rad; y <= ys + rad; ++y)
 				{
-					for (size_t j = 0; j < 8; ++j)
+					for (int z = zs - rad; z <= zs + rad; ++z)
 					{
-						uint32_t modi = (uint32_t)j;
-						if (appInfo.EditMode < 1 ? (svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posMap()[i].index].masks & (1 << (24 + modi))) > 0 :
-						(svo.vec()[svo.posMap()[i].index].masks & (1 << (16 + modi))) > 0)
+						int i = (int)(x + (y * 256) + (z * 256 * 256));
+						if (i < 0) continue;
+						if (i >= svo.posIndexMap().size()) continue;
+
+						glm::vec3 pos = svo.posIndexMap()[(size_t)i].position;
+						glm::vec3 dist = pos - (fancyExplosion ? glm::vec3(appInfo.explosion) : res.position);
+						if (glm::dot(dist, dist) < destroyRad2)
 						{
-							editVoxelUseMap(voxelCount, (uint32_t)svo.posMap()[i].index, modi, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
-							updatedBlocks[svo.posMap()[i].index] = 0;
+							for (size_t j = 0; j < 8; ++j)
+							{
+								uint32_t modi = (uint32_t)j;
+								if (appInfo.EditMode < 1 ? (svo.vec()[svo.posIndexMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posIndexMap()[i].index].masks & (1 << (24 + modi))) > 0 :
+								(svo.vec()[svo.posIndexMap()[i].index].masks & (1 << (16 + modi))) > 0)
+								{
+									editVoxelUseMap(voxelCount, (uint32_t)svo.posIndexMap()[i].index, modi, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
+									updatedBlocks[svo.posIndexMap()[i].index] = 1;
+								}
+							}
 						}
 					}
 				}
@@ -657,7 +700,7 @@ int main()
 			appInfo.explosion.w += deltaTimeSec - deltaExplosionMod;
 			if (fancyExplosion && !didExplode && appInfo.explosion.w >= 0.5f)
 			{
-				modifyVoxels(0, svo.posMap().size());
+				modifyVoxels();
 				didExplode = true;
 			}
 		}
@@ -778,11 +821,11 @@ int main()
 		{
 			clickDelay = 0.0f;
 			updates.clear();
-			editVoxelUseMap(voxelCount, res.index, res.childIndex, appInfo, svo, devCon, structuredBuffer, updates);
-			for (size_t i = 0; i < updates.size(); ++i)
-			{
-				devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
-			}
+			editVoxelUseMap(voxelCount, res.index, res.childIndex, appInfo, svo, devCon, structuredBuffer, updates, updatedBlocks);
+			//for (size_t i = 0; i < updates.size(); ++i)
+			//{
+			//	devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
+			//}
 
 			res = svo.getHit(appInfo.pos, appInfo.forward, appInfo.EditMode > 0);
 			appInfo.hitIndex = res.index;
@@ -824,7 +867,12 @@ int main()
 				}
 				else
 				{
-					modifyVoxels(0, svo.posMap().size());
+					auto deltaPogPre = std::chrono::high_resolution_clock::now();
+
+					modifyVoxels();
+
+					float deltaPog = (float)std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - deltaPogPre).count();
+					if (deltaPog > 0.0f) printf("\n%0.9f delta cpu\n", deltaPog);
 				}
 			}
 		}
@@ -833,15 +881,14 @@ int main()
 		size_t i;
 		for (i = 0; i < updates.size(); ++i)
 		{
-			uint8_t val = updatedBlocks[updates[i].index];
-			if (val <= 0)
-			{
-				devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
-				updatedBlocks[updates[i].index] = 1;
-			}
+			devCon->UpdateSubresource(structuredBuffer, 0, &updates[i].destRegion, &svo.vec().data()[updates[i].index], 0, 0);
+			updatedBlocks[updates[i].index] = 0;
 		}
 		deltaExplosionMod = (float)std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - preExUp).count();
+		if (deltaExplosionMod > 0.0f) printf("%0.9f delta\n", deltaExplosionMod);
+
 		deltaExplosionMod /= 1000000.0f;
+
 
 		updates.erase(updates.begin(), updates.begin() + i);
 

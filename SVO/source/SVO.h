@@ -72,6 +72,12 @@ public:
 		uint8_t child{ 0 };
 	};
 
+	struct PosIndex
+	{
+		float3 position;
+		size_t index;
+	};
+
 public:
 
 	SVO() = default;
@@ -90,6 +96,8 @@ public:
 	float& rootRadius();
 
 	std::vector<PosMapper>& posMap();
+	
+	std::vector<PosIndex>& posIndexMap();
 
 	uint getValidMask(uint mask, uint index);
 	uint getLeafMask(uint mask, uint index);
@@ -106,6 +114,7 @@ public:
 private:
 	std::vector<Element> Elements;
 	std::vector<PosMapper> PositionMap;
+	std::vector<PosIndex> PosToIndexMap;
 	float mRootRadius{ 256.0f };
 
 };

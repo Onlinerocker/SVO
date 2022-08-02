@@ -521,7 +521,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 
             if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
             {
-                if (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0)
+                if (Elements[rootIndex].masks >> 24 == 256 || (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0))
                 {
                     didNotHit = false;
                     break;

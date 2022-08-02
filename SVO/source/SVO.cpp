@@ -15,6 +15,11 @@ std::vector<SVO::PosMapper>& SVO::posMap()
     return PositionMap;
 }
 
+std::vector<SVO::PosIndex>& SVO::posIndexMap()
+{
+    return PosToIndexMap;
+}
+
 float& SVO::rootRadius()
 {
     return mRootRadius;
