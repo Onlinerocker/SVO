@@ -567,7 +567,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
                         return placementColor;
                     }
             
-                    if (sr.x >= 0.0)
+                    if (sr.x >= 0.0 && Explosion.w <= 1.0)
                     {
                         return float4(explosionColor, 1);
                     }
@@ -632,7 +632,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 return placementColor;
             }
-            else if (DebugMode != 1 && sr.x >= 0.0 && sr.x < retChild.x)
+            else if (DebugMode != 1 && Explosion.w <= 1.0 && sr.x >= 0.0 && sr.x < retChild.x)
             {
                 return float4(explosionColor, 1);
             }
@@ -641,7 +641,7 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
         }
     }
     
-    if (sr.x >= 0.0)
+    if (sr.x >= 0.0 && Explosion.w <= 1.0)
     {
         return float4(explosionColor, 1);
     }

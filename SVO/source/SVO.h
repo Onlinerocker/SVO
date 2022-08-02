@@ -40,7 +40,6 @@ public:
 	{
 		uint32_t childPointer;  //relative pointer to children in SVO
 		uint32_t masks; //8 most sig bits = valid mask, next 8 bits = leaf mask
-		//uint64_t padding; //needed for cbuffer
 	};
 
 	struct ParentElement

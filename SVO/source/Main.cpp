@@ -705,10 +705,10 @@ int main()
 			}
 		}
 		
-		if(appInfo.explosion.w > 1.0f)
-		{
-			appInfo.explosion.w = 1.0f;
-		}
+		//if(appInfo.explosion.w > 1.0f)
+		//{
+		//	appInfo.explosion.w = 1.0f;
+		//}
 
 		startTime = std::chrono::high_resolution_clock::now();
 
