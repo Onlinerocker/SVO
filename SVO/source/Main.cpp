@@ -676,10 +676,10 @@ int main()
 						if (i >= svo.posIndexMap().size()) continue;
 
 						glm::vec3 pos = svo.posIndexMap()[(size_t)i].position;
-						glm::vec3 dist = pos - (fancyExplosion ? glm::vec3(appInfo.explosion) : res.position);
-						if (glm::dot(dist, dist) < destroyRad2)
+						for (size_t j = 0; j < 8; ++j)
 						{
-							for (size_t j = 0; j < 8; ++j)
+							glm::vec3 dist = (pos + offsets[j]) - (fancyExplosion ? glm::vec3(appInfo.explosion) : res.position);
+							if (glm::dot(dist, dist) < destroyRad2)
 							{
 								uint32_t modi = (uint32_t)j;
 								if (appInfo.EditMode < 1 ? (svo.vec()[svo.posIndexMap()[i].index].masks & (1 << (16 + modi))) > 0 && (svo.vec()[svo.posIndexMap()[i].index].masks & (1 << (24 + modi))) > 0 :
