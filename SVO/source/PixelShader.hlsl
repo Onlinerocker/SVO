@@ -438,6 +438,127 @@ bool isInside(float3 pos, float3 posRoot, float scale)
 
 }
 
+bool raytraceOctree(float3 cameraPos, float3 dir, float maxLen2)
+{
+    uint stackIndex = 0;
+    ParentElement stack[64];
+    float3 rootPos = float3(0, 0, 0);
+    float rootScale = RootRadius;
+
+    {
+        float4 child = float4(rootPos, rootScale);
+        float3 retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
+        float rootD = retChild.x;
+        
+        float rootExit = retChild.y;
+        float exitMax = retChild.y;
+        uint rootIndex = 0;
+
+        if (retChild.x <= 0.0 && retChild.y <= 0.0)
+        {
+            return false;
+        }
+
+        float3 childPos = cameraPos + (retChild.x * dir);
+
+        uint childHitIndex = getChildIndex(rootPos, childPos, rootScale, cameraPos, dir);
+        float3 indexPos = childPos;
+        child = getChildBox(rootPos, rootScale, childHitIndex);
+
+        bool didNotHit = true;
+
+        while (didNotHit)
+        {
+            retChild = raytraceBox(child.xyz, child.w, cameraPos, dir);
+            childPos = cameraPos + (retChild.x * dir);
+            
+            float3 dif = childPos - child.xyz;
+            dif = abs(dif);
+            float radThresh = child.w - 0.2f;
+            
+            float3 childPosMax = cameraPos + (retChild.y * dir);
+
+            if (getValidMask(Elements[rootIndex].masks, childHitIndex) > 0 && (retChild.x >= 0.0 || (retChild.x < 0.0 && isInside(cameraPos, rootPos, rootScale))))
+            {
+                if (Elements[rootIndex].masks >> 24 == 256 || (getLeafMask(Elements[rootIndex].masks, childHitIndex) > 0 && retChild.x >= 0.0 && retChild.y > 0.0))
+                {
+                    return dot(childPos - cameraPos, childPos - cameraPos) < maxLen2;
+                }
+                else if (getLeafMask(Elements[rootIndex].masks, childHitIndex) == 0)
+                {
+                    ParentElement parent;
+                    parent.pos = rootPos;
+                    parent.scale = rootScale;
+                    parent.exit = rootExit;
+                    parent.index = rootIndex;
+                    parent.childIndex = childHitIndex;
+                    stack[stackIndex++] = parent;
+
+                    rootPos = child.xyz;
+                    rootScale = child.w;
+
+                    rootExit = retChild.y;
+                    rootIndex = getChildPointer(Elements[rootIndex], childHitIndex);
+
+                    float3 downChild = cameraPos + (retChild.x * dir);
+                    childHitIndex = getChildIndex(rootPos, downChild, rootScale, cameraPos, dir);
+
+                    indexPos = childPos;
+                    child = getChildBox(rootPos, rootScale, childHitIndex);
+
+                    continue;
+                }
+            }
+            //else if (DebugMode == 1 && retChild.x > 0.0)
+            //{
+            //    if (sr.x >= rootD && sr.x < retChild.x)
+            //        return float4(1, 0, 0, 1);
+            //    return float4(0, 0, 0, 1);
+            //}
+            
+            if (retChild.y >= rootExit)
+            {
+                if (retChild.y >= exitMax)
+                {
+                    //if (EditMode == 1 && retPlace.x >= 0.0 && DidHit)
+                    //{
+                    //    return placementColor;
+                    //}
+                    //
+                    //if (sr.x >= 0.0 && Explosion.w <= 1.0)
+                    //{
+                    //    return float4(explosionColor, 1);
+                    //}
+                    return false;
+                }
+            }
+
+            {
+                childHitIndex = getChildIndexNext(childHitIndex, dir, retChild.z);
+                while (childHitIndex > 7 && stackIndex >= 1)
+                {
+                    --stackIndex;
+                    rootPos = stack[stackIndex].pos;
+                    rootScale = stack[stackIndex].scale;
+                    rootExit = stack[stackIndex].exit;
+                    rootIndex = stack[stackIndex].index;
+
+                    float4 childTemp = getChildBox(rootPos, rootScale, stack[stackIndex].childIndex);
+                    float3 retTemp = raytraceBox(childTemp.xyz, childTemp.w, cameraPos, dir);
+                    childHitIndex = getChildIndexNext(stack[stackIndex].childIndex, dir, retTemp.z);
+                }
+                if (childHitIndex > 7)
+                {
+                    return false;
+                }
+                indexPos = childPosMax;
+                child = getChildBox(rootPos, rootScale, childHitIndex);
+            }
+
+        }
+    }
+}
+
 float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
 {
     float x = position.x - 960.0;
@@ -619,8 +740,14 @@ float4 pixelMain(float4 position : SV_POSITION) : SV_TARGET
             {
                 float3 toEx = Explosion.xyz - indexPos;
                 float toExLen2 = dot(toEx, toEx);
-                float att = clamp((curExRad * curExRad)/toExLen2, 0, 1) * 10.0f;
-                voxColor += diffColor * ((clamp(dot(voxNorm, normalize(toEx)), 0, 1)) * 1.5) * att;
+                toExLen2 -= (curExRad * curExRad);
+                if (toExLen2 < (ExplosionRadius.x*ExplosionRadius.x*ExplosionRadius.x))
+                {
+                    float att = clamp((curExRad * curExRad)/toExLen2, 0, 1) * 10.0f;
+                    bool hasShadow = raytraceOctree(indexPos, normalize(toEx), toExLen2);
+                    att *= hasShadow ? 0.0 : 1.0;
+                    voxColor += diffColor * ((clamp(dot(voxNorm, normalize(toEx)), 0, 1)) * 1.5) * att;
+                }
             }
 
             if (EditMode == 0 && HitIndex == rootIndex && HitChildIndex == childHitIndex)
